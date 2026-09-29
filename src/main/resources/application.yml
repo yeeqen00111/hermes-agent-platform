@@ -1,0 +1,49 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: hermes-runtime
+  datasource:
+    # 开发环境使用SQLite，生产环境切换到MySQL
+    url: jdbc:sqlite:./data/hermes_agent.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: delFlag
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# HERMES Agent Platform Configuration
+hermes:
+  agent:
+    # 默认模型配置
+    default-model: ${DEFAULT_MODEL:gpt-4}
+    # 工具执行超时时间(ms)
+    tool-timeout: 10000
+    # SSE心跳间隔(ms)
+    sse-heartbeat-interval: 15000
+    # 审批超时时间(s)
+    approval-timeout: 300
+  security:
+    # 服务间调用令牌
+    service-token: ${SERVICE_TOKEN:change-me-in-production}
+  channel:
+    # 渠道适配器配置
+    feishu:
+      enabled: false
+      app-id: ${FEISHU_APP_ID:}
+      app-secret: ${FEISHU_APP_SECRET:}
+
+logging:
+  level:
+    com.hermes.agent: DEBUG
+    org.springframework.web: INFO
