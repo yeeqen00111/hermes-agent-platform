@@ -36,6 +36,13 @@ hermes:
   security:
     # 服务间调用令牌
     service-token: ${SERVICE_TOKEN:change-me-in-production}
+  tools:
+    # 迁移项工具 mock 开关（仅开发联调；false 时未接通工具显式报 MIGRATION_PENDING，不返回假数据）
+    mock: false
+  migration:
+    data-plane:
+      # Java 平台数据面地址（四期迁移对接位，契约见 migration-assessment.md §6，待 Java 团队确认）
+      base-url: ${MIGRATION_DATA_PLANE_BASE_URL:}
   channel:
     # 渠道适配器配置
     feishu:

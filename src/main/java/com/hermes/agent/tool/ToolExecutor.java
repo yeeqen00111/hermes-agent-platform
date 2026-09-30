@@ -36,6 +36,7 @@ public class ToolExecutor {
     private final ToolCallAuditService auditService;
     private final SkillRegistry skillRegistry;
     private final NotificationGateway notificationGateway;
+    private final MigrationToolAdapter migrationToolAdapter;
     private final ObjectMapper objectMapper;
 
     /**
@@ -93,14 +94,14 @@ public class ToolExecutor {
             }
         }
 
-        // 4. skill.load / notification.send 真实执行，其余工具开发阶段用Mock
+        // 4. skill.load / notification.send 真实执行；迁移项工具走适配层（四期，未接通显式报错）
         if ("skill.load".equals(toolCode)) {
             return executeSkillLoad(request, startTime);
         }
         if ("notification.send".equals(toolCode)) {
             return executeNotificationSend(request, startTime);
         }
-        return mockExecute(toolCode, request, startTime);
+        return migrationToolAdapter.execute(toolCode, request, startTime);
     }
 
     private ToolResponse executeNotificationSend(ToolRequest request, long startTime) {
@@ -210,43 +211,6 @@ public class ToolExecutor {
             case CANCELLED -> "审批已撤回，操作已被拒绝";
             default -> "操作被审批人拒绝";
         };
-    }
-
-    /**
-     * Mock执行（开发阶段）
-     */
-    private ToolResponse mockExecute(String toolCode, ToolRequest request, long startTime) {
-        log.info("Mock执行工具: {}, 参数: {}", toolCode, request.getArguments());
-
-        ToolResponse response = new ToolResponse();
-        response.setSuccess(true);
-        response.setData(createMockData(toolCode));
-        response.setCitations(createMockCitations(toolCode));
-        response.setDurationMs(System.currentTimeMillis() - startTime);
-
-        return response;
-    }
-
-    private Object createMockData(String toolCode) {
-        // 返回简单的Mock数据
-        return switch (toolCode) {
-            case "log.search" -> new Object[]{
-                    Map.of("eventId", "mock-001", "message", "Mock log entry", "level", "ERROR")
-            };
-            case "alert.query" -> new Object[]{
-                    Map.of("alertId", 1, "severity", "P1", "status", "NEW")
-            };
-            default -> Map.of("message", "Mock data for " + toolCode);
-        };
-    }
-
-    private java.util.List<com.hermes.agent.dto.ToolResponse.Citation> createMockCitations(String toolCode) {
-        var citation = new com.hermes.agent.dto.ToolResponse.Citation();
-        citation.setKind("log");
-        citation.setSource("mock-source");
-        citation.setTitle("Mock Citation");
-        citation.setLocator("mock-locator");
-        return java.util.List.of(citation);
     }
 
     private ToolResponse errorResponse(String toolCode, String errorCode,

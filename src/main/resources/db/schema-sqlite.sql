@@ -559,9 +559,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_whitelist_tool_user ON ai_approval_whitelis
 INSERT OR IGNORE INTO ai_agent_profile
 (agent_code, name, description, model_provider, model_name, execution_mode, trigger_type,
  enabled_tools, memory_policy, status) VALUES
-('assistant', '通用运维助手', '默认对话身份：日志/告警/配置查询与处置', 'deepseek', 'deepseek-chat',
+('assistant', '通用运维助手', '默认对话身份：日志/告警/nacos配置查询与处置（白板运维授权面）', 'deepseek', 'deepseek-chat',
  'LLM_DRIVEN', 'CHAT',
- '["log.search","log.context","log.aggregate","alert.query","knowledge.search"]',
+ '["log.search","log.context","log.aggregate","alert.query","alert.acknowledge","alert.resolve","alert.suppress","nacos.change.query","nacos.config.query","nacos.instance.query","knowledge.search"]',
  '{"injectTopK":10,"writeback":true}', 'PUBLISHED'),
 ('code-reviewer', '代码评审专家', 'API/WEBHOOK/SCHEDULED触发的代码评审身份，输出markdown多维评分报告', 'deepseek', 'deepseek-chat',
  'LLM_DRIVEN', 'API',
@@ -570,9 +570,15 @@ INSERT OR IGNORE INTO ai_agent_profile
 ('report-analyst', '报表分析员', '固定流程编排身份：聚合日志→生成告警报表摘要', 'deepseek', 'deepseek-chat',
  'FIXED_FLOW', 'SCHEDULED',
  '["log.aggregate","alert.query"]',
+ '{"injectTopK":0,"writeback":false}', 'PUBLISHED'),
+('data-analyst', '问数分析员', '固定流程编排身份：受控指标查询→结果分析与解释（四期迁移适配，数据面待Java平台）', 'deepseek', 'deepseek-chat',
+ 'FIXED_FLOW', 'CHAT',
+ '["database.metric.query","knowledge.search"]',
  '{"injectTopK":0,"writeback":false}', 'PUBLISHED');
 
 UPDATE ai_agent_profile SET flow_definition = '{"steps":[{"code":"aggregate","name":"告警日志聚合","type":"TOOL","toolCode":"log.aggregate"},{"code":"summarize","name":"报表摘要生成","type":"LLM","upstream":"aggregate","promptTemplate":"你是报表分析员。基于以下聚合数据生成告警报表摘要（markdown）：\n{{prev}}"}]}' WHERE agent_code = 'report-analyst';
+
+UPDATE ai_agent_profile SET flow_definition = '{"steps":[{"code":"query","name":"受控指标查询","type":"TOOL","toolCode":"database.metric.query"},{"code":"analyze","name":"结果分析与解释","type":"LLM","upstream":"query","promptTemplate":"你是问数分析员。基于以下查询结果给出结论、表格与解释（markdown）：\n{{prev}}"}]}' WHERE agent_code = 'data-analyst';
 
 INSERT OR IGNORE INTO ai_agent_context_file (file_type, content, scope, agent_code) VALUES
 ('SOUL', '# SOUL
@@ -590,7 +596,13 @@ INSERT OR IGNORE INTO ai_agent_context_file (file_type, content, scope, agent_co
 ('AGENTS', '# AGENTS
 评审约定：遵循仓库review_prompt_extra中的仓库级规范；评分0-100；每个问题标注severity(BLOCKER/CRITICAL/MAJOR/MINOR)与category。', 'AGENT', 'code-reviewer'),
 ('SOUL', '# SOUL
-你是报表分析员，按固定流程执行：聚合→摘要。不做流程外推理。', 'AGENT', 'report-analyst');
+你是报表分析员，按固定流程执行：聚合→摘要。不做流程外推理。', 'AGENT', 'report-analyst'),
+('SOUL', '# SOUL
+你是问数分析员，按固定流程执行：指标查询→分析解释。不做流程外推理。
+输入：自然语言问题→指标与维度识别→受控查询。
+输出：表格、图表建议与解释；只读查询，不写库。', 'AGENT', 'data-analyst'),
+('AGENTS', '# AGENTS
+问数约定：指标定义与SQL模板由平台语义层提供；只允许SELECT；结果须标注数据时间范围与来源指标编码。', 'AGENT', 'data-analyst');
 
 -- ============================================
 -- 三期 平台管理面：项目 / 用户（人员）

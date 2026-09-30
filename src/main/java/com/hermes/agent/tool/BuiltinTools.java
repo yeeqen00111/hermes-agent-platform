@@ -108,13 +108,133 @@ public class BuiltinTools {
         };
     }
 
+    /**
+     * 参数Schema（对齐 interface-contract §4.3 逐工具入参；Guardrail 深度校验暂为 TODO）
+     */
     private Map<String, Object> buildParamSchema(String toolCode) {
-        // 简化版，返回空schema
-        // 实际应该根据每个工具的入参定义完整的JSON Schema
-        Map<String, Object> schema = new HashMap<>();
+        Map<String, Object> properties = new LinkedHashMap<>();
+        List<String> required = new ArrayList<>();
+
+        switch (toolCode) {
+            case "log.search" -> {
+                properties.put("service", strProp("服务名"));
+                properties.put("environment", strProp("环境（prod/staging/test）"));
+                properties.put("level", strProp("日志级别（ERROR/WARN/INFO/DEBUG）"));
+                properties.put("keyword", strProp("关键词"));
+                properties.put("traceId", strProp("链路ID"));
+                properties.put("from", strProp("起始时间（ISO-8601）"));
+                properties.put("to", strProp("结束时间（ISO-8601）"));
+                properties.put("limit", intProp("返回条数"));
+                required.addAll(List.of("service", "from", "to"));
+            }
+            case "log.context" -> {
+                properties.put("eventId", strProp("日志事件ID"));
+                properties.put("before", intProp("向前取 N 条（默认5）"));
+                properties.put("after", intProp("向后取 N 条（默认5）"));
+                required.add("eventId");
+            }
+            case "log.aggregate" -> {
+                properties.put("service", strProp("服务名"));
+                properties.put("environment", strProp("环境"));
+                properties.put("groupBy", strProp("聚合维度（level/service/exceptionType）"));
+                properties.put("from", strProp("起始时间（ISO-8601）"));
+                properties.put("to", strProp("结束时间（ISO-8601）"));
+                required.addAll(List.of("service", "from", "to"));
+            }
+            case "alert.query" -> {
+                properties.put("severity", strProp("等级（P0-P3）"));
+                properties.put("status", strProp("状态（NEW/CONFIRMED/RESOLVED）"));
+                properties.put("service", strProp("服务名"));
+                properties.put("environment", strProp("环境"));
+                properties.put("from", strProp("起始时间（ISO-8601）"));
+                properties.put("to", strProp("结束时间（ISO-8601）"));
+                properties.put("limit", intProp("返回条数"));
+            }
+            case "alert.acknowledge" -> {
+                properties.put("alertId", strProp("告警ID"));
+                properties.put("comment", strProp("确认备注"));
+                required.add("alertId");
+            }
+            case "alert.resolve" -> {
+                properties.put("alertId", strProp("告警ID"));
+                properties.put("comment", strProp("解决备注"));
+                required.add("alertId");
+            }
+            case "alert.suppress" -> {
+                properties.put("alertId", strProp("告警ID"));
+                properties.put("comment", strProp("静默原因"));
+                required.add("alertId");
+            }
+            case "nacos.change.query" -> {
+                properties.put("namespace", strProp("命名空间"));
+                properties.put("group", strProp("配置分组"));
+                properties.put("dataId", strProp("配置ID"));
+                properties.put("from", strProp("起始时间（ISO-8601）"));
+                properties.put("to", strProp("结束时间（ISO-8601）"));
+                properties.put("limit", intProp("返回条数"));
+                required.addAll(List.of("from", "to"));
+            }
+            case "nacos.config.query" -> {
+                properties.put("namespace", strProp("命名空间"));
+                properties.put("group", strProp("配置分组"));
+                properties.put("dataId", strProp("配置ID"));
+                required.addAll(List.of("namespace", "group", "dataId"));
+            }
+            case "nacos.instance.query" -> {
+                properties.put("service", strProp("服务名"));
+                properties.put("namespace", strProp("命名空间"));
+                properties.put("cluster", strProp("集群"));
+                properties.put("environment", strProp("环境"));
+            }
+            case "knowledge.search" -> {
+                properties.put("query", strProp("检索问题"));
+                properties.put("knowledgeBaseIds", strProp("知识库ID列表"));
+                properties.put("projectId", strProp("项目ID（权限过滤）"));
+                properties.put("topK", intProp("返回条数（默认5）"));
+                required.add("query");
+            }
+            case "skill.load" -> {
+                properties.put("skillCode", strProp("技能编码"));
+                required.add("skillCode");
+            }
+            case "database.metric.query" -> {
+                properties.put("metric", strProp("指标编码"));
+                properties.put("dimensions", strProp("维度（JSON）"));
+                properties.put("filters", strProp("过滤条件（JSON）"));
+                properties.put("from", strProp("起始时间（ISO-8601）"));
+                properties.put("to", strProp("结束时间（ISO-8601）"));
+                required.addAll(List.of("metric", "from", "to"));
+            }
+            case "report.generate" -> {
+                properties.put("scope", strProp("人工选定范围（environment/system/service，JSON）"));
+                properties.put("from", strProp("起始时间（ISO-8601）"));
+                properties.put("to", strProp("结束时间（ISO-8601）"));
+                properties.put("format", strProp("输出格式（md/html/xlsx）"));
+                required.addAll(List.of("from", "to"));
+            }
+            case "notification.send" -> {
+                properties.put("channelType", strProp("通道类型（FEISHU/EMAIL）"));
+                properties.put("recipient", strProp("接收人（邮箱/飞书）"));
+                properties.put("title", strProp("标题"));
+                properties.put("content", strProp("内容"));
+                required.addAll(List.of("channelType", "recipient", "content"));
+            }
+            default -> {
+            }
+        }
+
+        Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
-        schema.put("properties", new HashMap<>());
-        schema.put("required", new ArrayList<>());
+        schema.put("properties", properties);
+        schema.put("required", required);
         return schema;
+    }
+
+    private Map<String, Object> strProp(String description) {
+        return Map.of("type", "string", "description", description);
+    }
+
+    private Map<String, Object> intProp(String description) {
+        return Map.of("type", "integer", "description", description);
     }
 }
