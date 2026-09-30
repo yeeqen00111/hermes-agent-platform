@@ -5,11 +5,13 @@ import com.hermes.agent.entity.AgentContextFile;
 import com.hermes.agent.entity.AgentMemory;
 import com.hermes.agent.entity.AgentProfile;
 import com.hermes.agent.entity.AgentUserProfile;
+import com.hermes.agent.entity.AgentVersion;
 import com.hermes.agent.mapper.AgentContextFileMapper;
 import com.hermes.agent.persona.MemoryService;
 import com.hermes.agent.persona.PersonaAssembler;
 import com.hermes.agent.persona.PersonaPack;
 import com.hermes.agent.persona.UserProfileService;
+import com.hermes.agent.persona.VersionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +30,7 @@ public class PersonaController {
     private final AgentContextFileMapper contextFileMapper;
     private final MemoryService memoryService;
     private final UserProfileService userProfileService;
+    private final VersionService versionService;
 
     /**
      * 身份包预览：组装后的系统提示与各身份层内容
@@ -87,5 +90,21 @@ public class PersonaController {
     @GetMapping("/{agentCode}/profile")
     public AgentProfile getProfile(@PathVariable String agentCode) {
         return personaAssembler.loadProfile(agentCode);
+    }
+
+    @GetMapping("/{agentCode}/versions")
+    public List<AgentVersion> listVersions(@PathVariable String agentCode) {
+        return versionService.versions(agentCode);
+    }
+
+    @PostMapping("/{agentCode}/publish")
+    public AgentVersion publish(@PathVariable String agentCode,
+                                @RequestParam(required = false, defaultValue = "system") String by) {
+        return versionService.publish(agentCode, by);
+    }
+
+    @PostMapping("/{agentCode}/rollback/{version}")
+    public AgentProfile rollback(@PathVariable String agentCode, @PathVariable int version) {
+        return versionService.rollback(agentCode, version);
     }
 }
