@@ -83,7 +83,8 @@ public class ChannelEventService {
             sessionManager.addMessage(sessionId, userMsg);
 
             String input = event.getMessage();
-            CommandRouter.CommandResult cmdResult = commandRouter.route(input);
+            CommandRouter.CommandResult cmdResult = commandRouter.route(input,
+                    new CommandRouter.CommandContext(sessionId, "assistant", platformUserId));
             if (cmdResult != null) {
                 if (!cmdResult.isRouteToChat()) {
                     replyText(channel, receiveId, cmdResult.isSuccess()

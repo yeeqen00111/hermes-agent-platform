@@ -3,9 +3,14 @@ package com.hermes.agent.command;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hermes.agent.entity.AgentProfile;
 import com.hermes.agent.entity.AiCommandBundle;
+import com.hermes.agent.entity.AiModel;
 import com.hermes.agent.entity.Skill;
+import com.hermes.agent.mapper.AgentProfileMapper;
 import com.hermes.agent.mapper.AiCommandBundleMapper;
+import com.hermes.agent.mapper.AiModelMapper;
+import com.hermes.agent.session.SessionManager;
 import com.hermes.agent.skill.SkillRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
@@ -27,43 +32,57 @@ public class CommandRouter {
 
     private final SkillRegistry skillRegistry;
     private final AiCommandBundleMapper bundleMapper;
+    private final AgentProfileMapper profileMapper;
+    private final AiModelMapper modelMapper;
+    private final SessionManager sessionManager;
     private final ObjectMapper objectMapper;
 
     private final Map<String, CommandHandler> builtinCommands = new ConcurrentHashMap<>();
 
+    /** 指令执行上下文：/model /context 需要知道当前会话与 Agent */
+    public record CommandContext(String sessionId, String agentCode, Long userId) {
+    }
+
     @PostConstruct
     private void registerBuiltinCommands() {
-        builtinCommands.put("new", args -> CommandResult.success("已创建新会话"));
-        builtinCommands.put("stop", args -> CommandResult.success("已停止当前生成"));
-        builtinCommands.put("help", args -> CommandResult.success("""
+        builtinCommands.put("new", (args, ctx) -> CommandResult.success("已创建新会话"));
+        builtinCommands.put("stop", (args, ctx) -> CommandResult.success("已停止当前生成"));
+        builtinCommands.put("help", (args, ctx) -> CommandResult.success("""
                 可用指令：
                 /new - 创建新会话
                 /stop - 停止生成
                 /help - 显示帮助
                 /agents - 列出可用Agent
-                /model - 切换模型
+                /model - 查看/切换本会话模型（/model provider/model，/model reset 恢复默认）
                 /skills - 列出已加载技能
                 /commands - 列出所有指令
                 /context - 显示上下文占用
                 """));
-        builtinCommands.put("agents", args -> CommandResult.success("TODO: 列出可用Agent"));
-        builtinCommands.put("model", args -> CommandResult.success("TODO: 切换模型"));
-        builtinCommands.put("skills", args -> {
+        builtinCommands.put("agents", (args, ctx) -> CommandResult.success(listAgents()));
+        builtinCommands.put("model", (args, ctx) -> handleModelCommand(args, ctx));
+        builtinCommands.put("skills", (args, ctx) -> {
             String index = skillRegistry.indexBlock();
             return CommandResult.success(index.isBlank()
                     ? "无已加载技能"
                     : "已加载技能：\n" + index);
         });
-        builtinCommands.put("commands", args -> CommandResult.success(listAllCommands()));
-        builtinCommands.put("context", args -> CommandResult.success("TODO: 显示上下文占用"));
+        builtinCommands.put("commands", (args, ctx) -> CommandResult.success(listAllCommands()));
+        builtinCommands.put("context", (args, ctx) -> handleContextCommand(ctx));
     }
 
     /**
-     * 解析并执行指令
+     * 解析并执行指令（无会话上下文，/model /context 会降级）
      *
      * @return 指令命中返回处理结果；routeToChat=true 表示技能/捆绑包指令，正文需并进本轮走对话
      */
     public CommandResult route(String input) {
+        return route(input, null);
+    }
+
+    /**
+     * 带会话上下文的路由：ChatController / ChannelEventService 调用
+     */
+    public CommandResult route(String input, CommandContext context) {
         if (input == null || !input.trim().startsWith("/")) {
             return null; // 不是指令，走正常对话流程
         }
@@ -75,7 +94,7 @@ public class CommandRouter {
         CommandHandler handler = builtinCommands.get(command);
         if (handler != null) {
             log.info("执行内置指令: /{}", command);
-            return handler.handle(args);
+            return handler.handle(args, context);
         }
 
         // 2. 技能指令：同名技能正文并进本轮（§7.1）
@@ -100,6 +119,121 @@ public class CommandRouter {
             hint += "。你是想用 /" + suggestion + " 吗？";
         }
         return CommandResult.error("UNKNOWN_COMMAND", hint);
+    }
+
+    private String listAgents() {
+        List<AgentProfile> profiles = profileMapper.selectList(new LambdaQueryWrapper<AgentProfile>()
+                .eq(AgentProfile::getStatus, "PUBLISHED")
+                .orderByAsc(AgentProfile::getAgentCode));
+        if (profiles.isEmpty()) {
+            return "无已发布 Agent";
+        }
+        return "可用 Agent：\n" + profiles.stream()
+                .map(p -> "- " + p.getAgentCode() + "：" + p.getName()
+                        + "（" + p.getModelProvider() + "/" + p.getModelName()
+                        + (p.getExecutionMode() == null ? "" : "，" + p.getExecutionMode()) + "）")
+                .collect(Collectors.joining("\n"));
+    }
+
+    private CommandResult handleModelCommand(String args, CommandContext ctx) {
+        List<AiModel> models = modelMapper.selectList(new LambdaQueryWrapper<AiModel>()
+                .eq(AiModel::getEnabled, 1)
+                .orderByAsc(AiModel::getProviderCode));
+        String catalog = models.isEmpty() ? "（模型目录为空）"
+                : models.stream().map(m -> m.getProviderCode() + "/" + m.getModelName())
+                        .collect(Collectors.joining("、"));
+
+        if (args == null || args.isBlank()) {
+            return CommandResult.success("当前模型：" + currentModelDesc(ctx)
+                    + "\n可用模型：" + catalog
+                    + "\n用法：/model <provider/model> 切换（仅本会话）；/model reset 恢复默认");
+        }
+        String wanted = args.trim();
+        if (ctx == null || ctx.sessionId() == null) {
+            return CommandResult.error("NO_SESSION", "无会话上下文，无法切换模型");
+        }
+        if ("reset".equalsIgnoreCase(wanted)) {
+            sessionManager.setModelOverride(ctx.sessionId(), null);
+            return CommandResult.success("已恢复 Agent 默认模型：" + currentModelDesc(ctx));
+        }
+        AiModel match = models.stream()
+                .filter(m -> (m.getProviderCode() + "/" + m.getModelName()).equalsIgnoreCase(wanted)
+                        || m.getModelName().equalsIgnoreCase(wanted))
+                .findFirst().orElse(null);
+        if (match == null) {
+            return CommandResult.error("UNKNOWN_MODEL",
+                    "未知模型: " + wanted + "。可用模型：" + catalog);
+        }
+        sessionManager.setModelOverride(ctx.sessionId(),
+                match.getProviderCode() + "/" + match.getModelName());
+        return CommandResult.success("本会话已切换模型：" + match.getProviderCode() + "/" + match.getModelName());
+    }
+
+    private String currentModelDesc(CommandContext ctx) {
+        if (ctx != null && ctx.sessionId() != null) {
+            String override = sessionManager.getSession(ctx.sessionId())
+                    .map(SessionManager.ChatSession::getModelOverride)
+                    .filter(o -> o != null && !o.isBlank())
+                    .orElse(null);
+            if (override != null) {
+                return override + "（会话级覆盖）";
+            }
+        }
+        if (ctx != null && ctx.agentCode() != null) {
+            AgentProfile profile = profileMapper.selectOne(new LambdaQueryWrapper<AgentProfile>()
+                    .eq(AgentProfile::getAgentCode, ctx.agentCode()));
+            if (profile != null) {
+                return profile.getModelProvider() + "/" + profile.getModelName() + "（Agent 默认）";
+            }
+        }
+        return "未知（无会话与 Agent 上下文）";
+    }
+
+    private CommandResult handleContextCommand(CommandContext ctx) {
+        if (ctx == null || ctx.sessionId() == null) {
+            return CommandResult.error("NO_SESSION", "无会话上下文");
+        }
+        String sessionId = ctx.sessionId();
+        List<SessionManager.ChatMessage> history = sessionManager.getHistory(sessionId, 500);
+        long totalChars = history.stream()
+                .mapToInt(m -> m.getContent() == null ? 0 : m.getContent().length())
+                .sum();
+        String model = sessionManager.getSession(sessionId)
+                .map(SessionManager.ChatSession::getModelOverride)
+                .filter(o -> o != null && !o.isBlank())
+                .orElseGet(() -> profileModel(ctx));
+        Integer window = null;
+        if (model != null) {
+            String modelName = model.contains("/") ? model.substring(model.indexOf('/') + 1) : model;
+            AiModel m = modelMapper.selectOne(new LambdaQueryWrapper<AiModel>()
+                    .eq(AiModel::getModelName, modelName)
+                    .eq(AiModel::getEnabled, 1)
+                    .last("limit 1"));
+            window = m == null ? null : m.getContextWindow();
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("会话 ").append(sessionId).append(" 上下文占用：\n");
+        sb.append("- 历史消息：").append(history.size()).append(" 条，合计 ")
+                .append(totalChars).append(" 字符\n");
+        if (model != null) {
+            sb.append("- 当前模型：").append(model);
+            if (window != null && window > 0) {
+                sb.append("，上下文窗口 ").append(window)
+                        .append("（约 ").append(window / 4).append(" tokens）");
+            }
+            sb.append('\n');
+        }
+        sb.append("- 提示：历史按窗口回读，系统提示与技能索引每轮重新装配");
+        return CommandResult.success(sb.toString());
+    }
+
+    private String profileModel(CommandContext ctx) {
+        if (ctx == null || ctx.agentCode() == null) {
+            return null;
+        }
+        AgentProfile profile = profileMapper.selectOne(new LambdaQueryWrapper<AgentProfile>()
+                .eq(AgentProfile::getAgentCode, ctx.agentCode()));
+        return profile == null ? null : profile.getModelProvider() + "/" + profile.getModelName();
     }
 
     private String listAllCommands() {
@@ -170,7 +304,7 @@ public class CommandRouter {
 
     @FunctionalInterface
     public interface CommandHandler {
-        CommandResult handle(String args);
+        CommandResult handle(String args, CommandContext context);
     }
 
     @Data

@@ -225,6 +225,7 @@ INSERT OR IGNORE INTO ai_model_provider (provider_code, name, base_url, api_key_
 
 INSERT OR IGNORE INTO ai_model (provider_code, model_name, context_window, supports_tools, enabled) VALUES
 ('deepseek', 'deepseek-chat', 64000, 1, 1),
+('deepseek', 'deepseek-reasoner', 64000, 1, 1),
 ('glm', 'glm-4-flash', 128000, 1, 1);
 
 -- 会话表
@@ -234,6 +235,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_session (
     user_id BIGINT NOT NULL,
     agent_code VARCHAR(64),
     agent_version INT,
+    model_override VARCHAR(128),
     title VARCHAR(255),
     channel VARCHAR(32),
     status VARCHAR(32) DEFAULT 'ACTIVE',

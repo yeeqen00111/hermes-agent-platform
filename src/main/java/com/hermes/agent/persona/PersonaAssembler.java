@@ -7,8 +7,10 @@ import com.hermes.agent.entity.AgentContextFile;
 import com.hermes.agent.entity.AgentMemory;
 import com.hermes.agent.entity.AgentProfile;
 import com.hermes.agent.entity.AgentUserProfile;
+import com.hermes.agent.entity.AiChatSession;
 import com.hermes.agent.mapper.AgentContextFileMapper;
 import com.hermes.agent.mapper.AgentProfileMapper;
+import com.hermes.agent.mapper.AiChatSessionMapper;
 import com.hermes.agent.skill.SkillRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ public class PersonaAssembler {
 
     private final AgentProfileMapper profileMapper;
     private final AgentContextFileMapper contextFileMapper;
+    private final AiChatSessionMapper chatSessionMapper;
     private final MemoryService memoryService;
     private final UserProfileService userProfileService;
     private final SkillRegistry skillRegistry;
@@ -45,6 +48,7 @@ public class PersonaAssembler {
 
     public PersonaPack assemble(String agentCode, Long userId, String sessionId) {
         AgentProfile profile = loadProfile(agentCode);
+        applySessionModelOverride(profile, sessionId);
         String soul = contextContent(profile.getAgentCode(), "SOUL");
         if (soul == null) {
             soul = profile.getSystemPrompt();
@@ -93,6 +97,29 @@ public class PersonaAssembler {
             sb.append("\n\n## 当前用户\n").append(pack.getUserProfile().trim());
         }
         return sb.toString();
+    }
+
+    /**
+     * /model 指令的会话级覆盖：ai_chat_session.model_override（格式 provider/model），
+     * 只影响本轮运行时选模，不改 Agent 档案。
+     */
+    private void applySessionModelOverride(AgentProfile profile, String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        AiChatSession session = chatSessionMapper.selectOne(new LambdaQueryWrapper<AiChatSession>()
+                .eq(AiChatSession::getSessionId, sessionId));
+        String override = session == null ? null : session.getModelOverride();
+        if (override == null || override.isBlank()) {
+            return;
+        }
+        int slash = override.indexOf('/');
+        if (slash > 0) {
+            profile.setModelProvider(override.substring(0, slash));
+            profile.setModelName(override.substring(slash + 1));
+        } else {
+            profile.setModelName(override);
+        }
     }
 
     private String contextContent(String agentCode, String fileType) {

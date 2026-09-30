@@ -242,6 +242,7 @@ CREATE TABLE ai_chat_session (
     user_id BIGINT NOT NULL COMMENT '用户ID',
     agent_code VARCHAR(64) COMMENT 'Agent编码',
     agent_version INT COMMENT 'Agent版本',
+    model_override VARCHAR(128) COMMENT '会话级模型覆盖: provider/model',
     title VARCHAR(255) COMMENT '会话标题',
     channel VARCHAR(32) COMMENT '渠道来源: WEB/FEISHU/DINGTALK/WECOM',
     status VARCHAR(32) DEFAULT 'ACTIVE' COMMENT '状态',
@@ -546,6 +547,7 @@ INSERT IGNORE INTO ai_model_provider (provider_code, name, base_url, api_key_ref
 
 INSERT IGNORE INTO ai_model (provider_code, model_name, context_window, supports_tools, enabled) VALUES
 ('deepseek', 'deepseek-chat', 64000, 1, 1),
+('deepseek', 'deepseek-reasoner', 64000, 1, 1),
 ('glm', 'glm-4-flash', 128000, 1, 1);
 
 INSERT IGNORE INTO ai_agent_profile

@@ -33,6 +33,10 @@ import java.util.concurrent.TimeoutException;
 @Service
 public class ApprovalService {
 
+    /** 可「始终允许」的幂等写工具：重复执行无副作用 */
+    private static final Set<String> IDEMPOTENT_WRITE_TOOLS = Set.of(
+            "alert.acknowledge", "alert.resolve");
+
     private final ApprovalRequestMapper requestMapper;
     private final ApprovalWhitelistMapper whitelistMapper;
     private final ObjectMapper objectMapper;
@@ -140,6 +144,13 @@ public class ApprovalService {
             return null;
         }
         ApprovalChoice choice = ApprovalChoice.fromString(rawChoice);
+        // 幂等边界（§12.1）：「始终允许」只对幂等写操作开放，其余降级为「允许一次」，
+        // 防止 alert.suppress / notification.send 这类会掩盖问题或重复触发的操作进白名单
+        if (choice == ApprovalChoice.ALLOW_ALWAYS && !IDEMPOTENT_WRITE_TOOLS.contains(row.getToolCode())) {
+            log.warn("工具 {} 非幂等写操作，allow_always 降级为 allow_once（requestId={}）",
+                    row.getToolCode(), requestId);
+            choice = ApprovalChoice.ALLOW_ONCE;
+        }
         ApprovalChoice applied = apply(requestId, choice, decidedBy, reason);
         if (applied == null) {
             return null;

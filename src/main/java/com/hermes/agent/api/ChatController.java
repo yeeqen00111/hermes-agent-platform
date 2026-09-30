@@ -58,7 +58,8 @@ public class ChatController {
                 sessionManager.createSession(sid, userId != null ? userId : 0L, request.getAgentCode()));
 
         // 检查是否是指令
-        CommandRouter.CommandResult cmdResult = commandRouter.route(request.getMessage());
+        CommandRouter.CommandResult cmdResult = commandRouter.route(request.getMessage(),
+                new CommandRouter.CommandContext(sid, request.getAgentCode(), userId));
         if (cmdResult != null) {
             if (cmdResult.isRouteToChat()) {
                 // 技能/捆绑包指令：正文拼到本轮用户消息前，走正常对话（§7.2）

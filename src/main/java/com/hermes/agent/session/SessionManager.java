@@ -59,6 +59,15 @@ public class SessionManager {
     }
 
     /**
+     * 会话级模型覆盖（/model 指令）：override 为空串/null 表示清除
+     */
+    public void setModelOverride(String sessionId, String override) {
+        sessionMapper.update(null, new LambdaUpdateWrapper<AiChatSession>()
+                .eq(AiChatSession::getSessionId, sessionId)
+                .set(AiChatSession::getModelOverride, override == null || override.isBlank() ? null : override));
+    }
+
+    /**
      * 添加消息（落库 + 刷新会话最后消息时间）
      */
     public void addMessage(String sessionId, ChatMessage message) {
@@ -124,6 +133,7 @@ public class SessionManager {
         session.setUserId(row.getUserId());
         session.setAgentCode(row.getAgentCode());
         session.setAgentVersion(row.getAgentVersion());
+        session.setModelOverride(row.getModelOverride());
         session.setTitle(row.getTitle());
         session.setChannel(row.getChannel());
         session.setStatus(row.getStatus());
@@ -176,6 +186,7 @@ public class SessionManager {
         private Long userId;
         private String agentCode;
         private Integer agentVersion;
+        private String modelOverride;
         private String title;
         private String channel;
         private String status;

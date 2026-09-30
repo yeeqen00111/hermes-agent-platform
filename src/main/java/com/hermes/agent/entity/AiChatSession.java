@@ -30,6 +30,9 @@ public class AiChatSession {
 
     private Integer agentVersion;
 
+    /** 会话级模型覆盖（/model 指令），格式 provider/model；空则用 Agent 默认 */
+    private String modelOverride;
+
     private String title;
 
     /** 渠道来源: WEB/FEISHU/DINGTALK/WECOM */
