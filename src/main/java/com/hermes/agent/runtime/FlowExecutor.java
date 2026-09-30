@@ -98,6 +98,8 @@ public class FlowExecutor {
         String toolCode = step.path("toolCode").asText();
         ToolRequest tr = new ToolRequest();
         tr.setTraceId(request.getTraceId());
+        tr.setSessionId(request.getSessionId());
+        tr.setAgentCode(pack.getAgentCode());
         tr.setUserId(request.getUserId());
         Map<String, Object> args = new HashMap<>();
         args.put("input", stepInput);

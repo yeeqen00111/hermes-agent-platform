@@ -475,6 +475,44 @@ CREATE TABLE cr_review_issue (
 ) ENGINE=InnoDB COMMENT='评审问题表';
 
 -- ============================================
+-- 审批门：WRITE/CONTROLLED 工具的人工确认（契约 §3.3）
+-- ============================================
+
+CREATE TABLE ai_approval_request (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    request_id VARCHAR(64) NOT NULL COMMENT '审批单号（对外暴露）',
+    session_id VARCHAR(64) COMMENT '所属会话（审批是会话级）',
+    agent_code VARCHAR(64) COMMENT '发起的身份包',
+    trace_id VARCHAR(64) COMMENT '调用链ID',
+    user_id BIGINT COMMENT '发起人',
+    tool_code VARCHAR(64) NOT NULL COMMENT '待执行工具',
+    tool_name VARCHAR(128) COMMENT '工具展示名',
+    safety_level VARCHAR(32) COMMENT 'WRITE/CONTROLLED',
+    arguments TEXT COMMENT '工具参数JSON（已脱敏）',
+    status VARCHAR(32) DEFAULT 'PENDING' COMMENT 'PENDING/ALLOWED/DENIED/TIMEOUT/CANCELLED',
+    choice VARCHAR(32) COMMENT 'allow_once/allow_session/allow_always/deny',
+    decided_by BIGINT COMMENT '审批人',
+    reason VARCHAR(500) COMMENT '拒绝或撤回原因',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expire_time DATETIME COMMENT '超时时刻',
+    decide_time DATETIME COMMENT '应答时刻',
+    UNIQUE KEY uk_approval_request_id (request_id),
+    INDEX idx_approval_session (session_id),
+    INDEX idx_approval_status (status)
+) ENGINE=InnoDB COMMENT='工具审批请求表';
+
+CREATE TABLE ai_approval_whitelist (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    tool_code VARCHAR(64) NOT NULL COMMENT '免审工具',
+    user_id BIGINT NOT NULL DEFAULT 0 COMMENT '生效用户，0=全部用户',
+    agent_code VARCHAR(64) COMMENT '生效身份包，空=全部',
+    granted_by BIGINT NOT NULL COMMENT '谁开的白名单',
+    grant_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '什么时候开的',
+    enabled TINYINT DEFAULT 1,
+    UNIQUE KEY uk_whitelist_tool_user (tool_code, user_id)
+) ENGINE=InnoDB COMMENT='审批白名单（allow_always 落库）';
+
+-- ============================================
 -- 种子身份包与模型供应商
 -- ============================================
 

@@ -1,8 +1,11 @@
 package com.hermes.agent.api;
 
+import com.hermes.agent.approval.ApprovalService;
+import com.hermes.agent.approval.ApprovalSink;
 import com.hermes.agent.command.CommandRouter;
 import com.hermes.agent.dto.SSEEvent;
 import com.hermes.agent.common.enums.SSEEventType;
+import com.hermes.agent.entity.ApprovalRequest;
 import com.hermes.agent.runtime.AgentRunRequest;
 import com.hermes.agent.runtime.AgentRunResult;
 import com.hermes.agent.runtime.AgentRuntime;
@@ -31,6 +34,7 @@ public class ChatController {
     private final SessionManager sessionManager;
     private final CommandRouter commandRouter;
     private final AgentRuntime agentRuntime;
+    private final ApprovalService approvalService;
 
     /**
      * 发送消息（SSE流式返回）
@@ -88,6 +92,8 @@ public class ChatController {
     @PostMapping("/sessions/{sessionId}/interrupt")
     public Map<String, Object> stopGeneration(@PathVariable String sessionId) {
         sessionManager.stopSession(sessionId);
+        approvalService.pending(sessionId, null)
+                .forEach(card -> approvalService.cancel(card.getRequestId(), "会话被用户中断"));
         return Map.of("success", true, "message", "已停止生成");
     }
 
@@ -133,7 +139,8 @@ public class ChatController {
      * 处理聊天流：交给单一基座 AgentRuntime（身份包 + LLM_DRIVEN/FIXED_FLOW）
      */
     private SseEmitter handleChatStream(String sessionId, ChatRequest request, String traceId, Long userId) {
-        SseEmitter emitter = new SseEmitter(120000L);
+        // 审批可能阻塞整轮，SSE 存活时间必须大于审批超时
+        SseEmitter emitter = new SseEmitter((approvalService.getTimeoutSeconds() + 60) * 1000L);
 
         SessionManager.ChatMessage userMsg = new SessionManager.ChatMessage();
         userMsg.setMessageId(UUID.randomUUID().toString());
@@ -158,7 +165,8 @@ public class ChatController {
                                 event.isSuccess() ? SSEEventType.TOOL_COMPLETE : SSEEventType.TOOL_START,
                                 Map.of("tool", event.getToolCode(),
                                         "success", event.isSuccess(),
-                                        "error", event.getErrorMessage() == null ? "" : event.getErrorMessage())));
+                                        "error", event.getErrorMessage() == null ? "" : event.getErrorMessage())),
+                        approvalSink(emitter));
 
                 SessionManager.ChatMessage assistantMsg = new SessionManager.ChatMessage();
                 assistantMsg.setMessageId(UUID.randomUUID().toString());
@@ -179,6 +187,36 @@ public class ChatController {
         }).start();
 
         return emitter;
+    }
+
+    /**
+     * 审批卡片走同一条 SSE 通道，卡片绑定会话（审批是会话级的）
+     */
+    private ApprovalSink approvalSink(SseEmitter emitter) {
+        return new ApprovalSink() {
+            @Override
+            public void onApprovalRequest(ApprovalRequest card) {
+                sendQuietly(emitter, SSEEventType.APPROVAL_REQUEST, Map.of(
+                        "requestId", card.getRequestId(),
+                        "sessionId", nullToEmpty(card.getSessionId()),
+                        "tool", nullToEmpty(card.getToolCode()),
+                        "toolName", nullToEmpty(card.getToolName()),
+                        "safetyLevel", nullToEmpty(card.getSafetyLevel()),
+                        "arguments", nullToEmpty(card.getArguments()),
+                        "expireTime", String.valueOf(card.getExpireTime())));
+            }
+
+            @Override
+            public void onApprovalCancel(String requestId, String reason) {
+                sendQuietly(emitter, SSEEventType.APPROVAL_CANCEL, Map.of(
+                        "requestId", nullToEmpty(requestId),
+                        "reason", nullToEmpty(reason)));
+            }
+        };
+    }
+
+    private String nullToEmpty(String s) {
+        return s == null ? "" : s;
     }
 
     private void sendQuietly(SseEmitter emitter, SSEEventType type, Object data) {

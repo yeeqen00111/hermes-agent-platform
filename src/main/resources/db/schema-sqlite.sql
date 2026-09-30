@@ -496,6 +496,45 @@ CREATE TABLE IF NOT EXISTS cr_review_issue (
 CREATE INDEX IF NOT EXISTS idx_review_issue_task ON cr_review_issue(task_uuid);
 
 -- ============================================
+-- 审批门：WRITE/CONTROLLED 工具的人工确认（契约 §3.3）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_approval_request (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id VARCHAR(64) NOT NULL UNIQUE,
+    session_id VARCHAR(64),
+    agent_code VARCHAR(64),
+    trace_id VARCHAR(64),
+    user_id BIGINT,
+    tool_code VARCHAR(64) NOT NULL,
+    tool_name VARCHAR(128),
+    safety_level VARCHAR(32),
+    arguments TEXT,
+    status VARCHAR(32) DEFAULT 'PENDING',
+    choice VARCHAR(32),
+    decided_by BIGINT,
+    reason VARCHAR(500),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expire_time DATETIME,
+    decide_time DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_approval_session ON ai_approval_request(session_id);
+CREATE INDEX IF NOT EXISTS idx_approval_status ON ai_approval_request(status);
+
+CREATE TABLE IF NOT EXISTS ai_approval_whitelist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool_code VARCHAR(64) NOT NULL,
+    user_id BIGINT NOT NULL DEFAULT 0,
+    agent_code VARCHAR(64),
+    granted_by BIGINT NOT NULL,
+    grant_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    enabled TINYINT DEFAULT 1
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_whitelist_tool_user ON ai_approval_whitelist(tool_code, user_id);
+
+-- ============================================
 -- 种子身份包：单一基座上的功能智能体 = 身份配置
 -- ============================================
 

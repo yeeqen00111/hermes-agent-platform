@@ -2,6 +2,7 @@ package com.hermes.agent.runtime;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hermes.agent.approval.ApprovalSink;
 import com.hermes.agent.dto.ToolRequest;
 import com.hermes.agent.dto.ToolResponse;
 import com.hermes.agent.llm.LlmGateway;
@@ -43,7 +44,7 @@ public class AgentRuntime {
     private final ObjectMapper objectMapper;
 
     public AgentRunResult run(AgentRunRequest request) {
-        return execute(request, null, null);
+        return execute(request, null, null, null);
     }
 
     /**
@@ -51,11 +52,21 @@ public class AgentRuntime {
      */
     public AgentRunResult stream(AgentRunRequest request, Consumer<String> onDelta,
                                  Consumer<AgentRunResult.ToolEvent> onToolEvent) {
-        return execute(request, onDelta, onToolEvent);
+        return execute(request, onDelta, onToolEvent, null);
+    }
+
+    /**
+     * 流式执行（带审批交互）：approvalSink 为 null 时 WRITE/CONTROLLED 工具一律拒绝
+     */
+    public AgentRunResult stream(AgentRunRequest request, Consumer<String> onDelta,
+                                 Consumer<AgentRunResult.ToolEvent> onToolEvent,
+                                 ApprovalSink approvalSink) {
+        return execute(request, onDelta, onToolEvent, approvalSink);
     }
 
     private AgentRunResult execute(AgentRunRequest request, Consumer<String> onDelta,
-                                   Consumer<AgentRunResult.ToolEvent> onToolEvent) {
+                                   Consumer<AgentRunResult.ToolEvent> onToolEvent,
+                                   ApprovalSink approvalSink) {
         PersonaPack pack = personaAssembler.assemble(
                 request.getAgentCode(), request.getUserId(), request.getSessionId());
 
@@ -83,7 +94,7 @@ public class AgentRuntime {
             }
 
             messages.add(LlmMessage.assistant(reply));
-            String toolResultText = executeToolCall(m.group(1), request, result, onToolEvent);
+            String toolResultText = executeToolCall(m.group(1), request, result, onToolEvent, approvalSink);
             messages.add(LlmMessage.tool(toolResultText));
         }
         return result;
@@ -96,19 +107,22 @@ public class AgentRuntime {
     }
 
     private String executeToolCall(String json, AgentRunRequest request, AgentRunResult result,
-                                   Consumer<AgentRunResult.ToolEvent> onToolEvent) {
+                                   Consumer<AgentRunResult.ToolEvent> onToolEvent,
+                                   ApprovalSink approvalSink) {
         String toolCode = "unknown";
         try {
             JsonNode node = objectMapper.readTree(json);
             toolCode = node.path("tool").asText();
             ToolRequest tr = new ToolRequest();
             tr.setTraceId(request.getTraceId());
+            tr.setSessionId(request.getSessionId());
+            tr.setAgentCode(request.getAgentCode());
             tr.setUserId(request.getUserId());
             Map<String, Object> args = new HashMap<>();
             node.path("arguments").fields().forEachRemaining(e ->
                     args.put(e.getKey(), e.getValue().isValueNode() ? e.getValue().asText() : e.getValue()));
             tr.setArguments(args);
-            ToolResponse resp = toolExecutor.execute(toolCode, tr);
+            ToolResponse resp = toolExecutor.execute(toolCode, tr, approvalSink);
             AgentRunResult.ToolEvent event = new AgentRunResult.ToolEvent(
                     toolCode, Boolean.TRUE.equals(resp.getSuccess()), resp.getErrorMessage());
             result.getToolEvents().add(event);

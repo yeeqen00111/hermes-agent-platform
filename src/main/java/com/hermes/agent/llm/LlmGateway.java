@@ -19,6 +19,8 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * LLM Gateway：OpenAI 兼容协议统一出口。
@@ -28,6 +30,10 @@ import java.util.function.Consumer;
 @Service
 @RequiredArgsConstructor
 public class LlmGateway {
+
+    /** mock 模式下触发工具调用的标记，仅用于联调 */
+    private static final String MOCK_TOOL_MARKER = "#mocktool";
+    private static final Pattern MOCK_TOOL = Pattern.compile("#mocktool\\s+([\\w.\\-]+)(?:\\s+(\\{.*}))?");
 
     private final ModelProviderMapper providerMapper;
     private final ObjectMapper objectMapper;
@@ -122,12 +128,25 @@ public class LlmGateway {
         return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
+    /**
+     * 无密钥时的兜底回复。
+     * 额外支持 `#mocktool <toolCode> [json参数]` 触发一次工具调用，用于审批门等链路的确定性联调。
+     */
     private String mockStream(AgentProfile profile, List<LlmMessage> messages, Consumer<String> onDelta) {
         String lastUser = messages.stream()
                 .filter(m -> "user".equals(m.getRole()))
                 .reduce((a, b) -> b)
                 .map(LlmMessage::getContent)
                 .orElse("");
+
+        boolean toolAlreadyCalled = messages.stream().anyMatch(m -> "tool".equals(m.getRole()));
+        if (!toolAlreadyCalled && lastUser.contains(MOCK_TOOL_MARKER)) {
+            String toolCall = buildMockToolCall(lastUser);
+            if (toolCall != null) {
+                return toolCall;
+            }
+        }
+
         String reply = "[mock:" + profile.getModelName() + "] 已收到请求：" + lastUser;
         if (onDelta == null) {
             return reply;
@@ -136,5 +155,17 @@ public class LlmGateway {
             onDelta.accept(reply.substring(i, Math.min(i + 8, reply.length())));
         }
         return reply;
+    }
+
+    private String buildMockToolCall(String lastUser) {
+        Matcher m = MOCK_TOOL.matcher(lastUser);
+        if (!m.find()) {
+            return null;
+        }
+        String toolCode = m.group(1);
+        String arguments = m.group(2) == null || m.group(2).isBlank()
+                ? "{\"environment\":\"dev\"}"
+                : m.group(2).trim();
+        return "```tool_call\n{\"tool\":\"" + toolCode + "\",\"arguments\":" + arguments + "}\n```";
     }
 }

@@ -14,6 +14,16 @@ public class ToolRequest {
     private String traceId;
 
     /**
+     * 会话ID（审批是会话级的，allow_session 依赖它）
+     */
+    private String sessionId;
+
+    /**
+     * 发起调用的身份包
+     */
+    private String agentCode;
+
+    /**
      * 用户ID
      */
     private Long userId;
