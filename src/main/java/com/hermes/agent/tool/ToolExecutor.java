@@ -10,6 +10,7 @@ import com.hermes.agent.dto.ToolResponse;
 import com.hermes.agent.entity.ApprovalRequest;
 import com.hermes.agent.entity.ToolCall;
 import com.hermes.agent.service.ToolCallAuditService;
+import com.hermes.agent.skill.SkillRegistry;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ public class ToolExecutor {
     private final Guardrail guardrail;
     private final ApprovalService approvalService;
     private final ToolCallAuditService auditService;
+    private final SkillRegistry skillRegistry;
     private final ObjectMapper objectMapper;
 
     /**
@@ -89,8 +91,32 @@ public class ToolExecutor {
             }
         }
 
-        // 4. 执行工具（当前用Mock）
+        // 4. skill.load 真实执行（读技能正文），其余工具开发阶段用Mock
+        if ("skill.load".equals(toolCode)) {
+            return executeSkillLoad(request, startTime);
+        }
         return mockExecute(toolCode, request, startTime);
+    }
+
+    private ToolResponse executeSkillLoad(ToolRequest request, long startTime) {
+        Map<String, Object> args = request.getArguments() == null ? Map.of() : request.getArguments();
+        Object code = args.get("skillCode");
+        if (code == null) {
+            code = args.get("name");
+        }
+        if (code == null || code.toString().isBlank()) {
+            return errorResponse("skill.load", "INVALID_ARGUMENT", "缺少参数 skillCode", startTime);
+        }
+        Optional<String> content = skillRegistry.content(code.toString());
+        if (content.isEmpty()) {
+            return errorResponse("skill.load", "SKILL_NOT_FOUND",
+                    "技能不存在或未发布正文: " + code, startTime);
+        }
+        ToolResponse response = new ToolResponse();
+        response.setSuccess(true);
+        response.setData(Map.of("skillCode", code.toString(), "content", content.get()));
+        response.setDurationMs(System.currentTimeMillis() - startTime);
+        return response;
     }
 
     private boolean requiresApproval(ToolDefinition toolDef) {

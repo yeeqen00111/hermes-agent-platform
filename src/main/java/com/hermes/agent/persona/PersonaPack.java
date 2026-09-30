@@ -20,6 +20,9 @@ public class PersonaPack {
 
     private String agentsContext;
 
+    /** 技能索引（只进 "code: description" 行，正文按需用 skill.load 加载） */
+    private String skillIndex;
+
     private List<String> memoryBlocks;
 
     private String userProfile;

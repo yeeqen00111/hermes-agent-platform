@@ -9,6 +9,7 @@ import com.hermes.agent.entity.AgentProfile;
 import com.hermes.agent.entity.AgentUserProfile;
 import com.hermes.agent.mapper.AgentContextFileMapper;
 import com.hermes.agent.mapper.AgentProfileMapper;
+import com.hermes.agent.skill.SkillRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +29,7 @@ public class PersonaAssembler {
     private final AgentContextFileMapper contextFileMapper;
     private final MemoryService memoryService;
     private final UserProfileService userProfileService;
+    private final SkillRegistry skillRegistry;
     private final ObjectMapper objectMapper;
 
     public AgentProfile loadProfile(String agentCode) {
@@ -60,6 +62,7 @@ public class PersonaAssembler {
                 .profile(profile)
                 .soul(soul)
                 .agentsContext(agents)
+                .skillIndex(skillRegistry.indexBlock(enabledSkillCodes(profile)))
                 .memoryBlocks(memories.stream()
                         .map(m -> "- " + m.getMemoryKey() + ": " + m.getContent())
                         .collect(Collectors.toList()))
@@ -78,6 +81,10 @@ public class PersonaAssembler {
         }
         if (pack.getAgentsContext() != null && !pack.getAgentsContext().isBlank()) {
             sb.append("\n\n## 环境约定\n").append(pack.getAgentsContext().trim());
+        }
+        if (pack.getSkillIndex() != null && !pack.getSkillIndex().isBlank()) {
+            sb.append("\n\n## 可用技能\n需要时用 skill.load 工具按技能名加载全文。\n")
+                    .append(pack.getSkillIndex().trim());
         }
         if (pack.getMemoryBlocks() != null && !pack.getMemoryBlocks().isEmpty()) {
             sb.append("\n\n## 记忆\n").append(String.join("\n", pack.getMemoryBlocks()));
@@ -110,6 +117,29 @@ public class PersonaAssembler {
             // 策略解析失败按默认值
         }
         return 10;
+    }
+
+    /**
+     * §8.1 enabledSkills 不配=全部可用；解析失败按全部可用（不因配置错误让技能整体消失）
+     */
+    private List<String> enabledSkillCodes(AgentProfile profile) {
+        if (profile.getEnabledSkills() == null || profile.getEnabledSkills().isBlank()) {
+            return List.of();
+        }
+        try {
+            JsonNode node = objectMapper.readTree(profile.getEnabledSkills());
+            List<String> codes = new ArrayList<>();
+            if (node.isArray()) {
+                node.forEach(n -> {
+                    if (!n.isNull() && !n.asText().isBlank()) {
+                        codes.add(n.asText());
+                    }
+                });
+            }
+            return codes;
+        } catch (Exception ignored) {
+            return List.of();
+        }
     }
 
     public boolean writebackEnabled(AgentProfile profile) {

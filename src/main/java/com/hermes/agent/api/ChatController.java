@@ -60,12 +60,17 @@ public class ChatController {
         // 检查是否是指令
         CommandRouter.CommandResult cmdResult = commandRouter.route(request.getMessage());
         if (cmdResult != null) {
+            if (cmdResult.isRouteToChat()) {
+                // 技能/捆绑包指令：正文拼到本轮用户消息前，走正常对话（§7.2）
+                String augmented = cmdResult.getContext() + "\n\n用户消息：\n" + request.getMessage();
+                return handleChatStream(sid, request, effectiveTraceId, userId, augmented);
+            }
             // 是指令，直接返回结果
             return handleCommandResponse(sid, cmdResult);
         }
 
         // 普通对话，流式返回
-        return handleChatStream(sid, request, effectiveTraceId, userId);
+        return handleChatStream(sid, request, effectiveTraceId, userId, request.getMessage());
     }
 
     /**
@@ -140,8 +145,11 @@ public class ChatController {
 
     /**
      * 处理聊天流：交给单一基座 AgentRuntime（身份包 + LLM_DRIVEN/FIXED_FLOW）
+     *
+     * @param effectiveInput 实际进模型的消息（技能指令会带并进的正文）；会话历史仍存用户原始消息
      */
-    private SseEmitter handleChatStream(String sessionId, ChatRequest request, String traceId, Long userId) {
+    private SseEmitter handleChatStream(String sessionId, ChatRequest request, String traceId,
+                                        Long userId, String effectiveInput) {
         // 审批可能阻塞整轮，SSE 存活时间必须大于审批超时
         SseEmitter emitter = new SseEmitter((approvalService.getTimeoutSeconds() + 60) * 1000L);
 
@@ -158,7 +166,7 @@ public class ChatController {
                         .agentCode(request.getAgentCode())
                         .userId(userId != null ? userId : 0L)
                         .sessionId(sessionId)
-                        .userInput(request.getMessage())
+                        .userInput(effectiveInput)
                         .traceId(traceId)
                         .channel("chat")
                         .build();

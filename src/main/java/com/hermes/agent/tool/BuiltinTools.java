@@ -57,6 +57,10 @@ public class BuiltinTools {
         tools.add(createTool("knowledge.search", "搜索知识库", SafetyLevel.READ,
                 Collections.emptyList()));
 
+        // 技能（§6.2 渐进披露：索引进系统提示，正文按名加载）
+        tools.add(createTool("skill.load", "按技能编码加载技能全文", SafetyLevel.READ,
+                Collections.singletonList("skillCode")));
+
         // 指标查询（暂缺Java接口）
         tools.add(createTool("database.metric.query", "查询业务指标", SafetyLevel.READ,
                 Collections.singletonList("environment")));
@@ -96,6 +100,7 @@ public class BuiltinTools {
             case "nacos.config.query" -> "查询Nacos当前配置快照";
             case "nacos.instance.query" -> "查询Nacos服务实例信息";
             case "knowledge.search" -> "搜索运维知识库";
+            case "skill.load" -> "按技能编码加载技能的SKILL.md全文（可用技能见系统提示索引）";
             case "database.metric.query" -> "查询业务指标数据";
             case "report.generate" -> "生成系统健康报表";
             case "notification.send" -> "发送通知消息";
