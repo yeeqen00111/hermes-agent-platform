@@ -118,6 +118,7 @@ public class AgentRuntime {
             tr.setSessionId(request.getSessionId());
             tr.setAgentCode(request.getAgentCode());
             tr.setUserId(request.getUserId());
+            tr.setChannel(request.getChannel());
             Map<String, Object> args = new HashMap<>();
             node.path("arguments").fields().forEachRemaining(e ->
                     args.put(e.getKey(), e.getValue().isValueNode() ? e.getValue().asText() : e.getValue()));

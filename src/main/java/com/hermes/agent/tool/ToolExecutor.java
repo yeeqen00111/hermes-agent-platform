@@ -1,5 +1,6 @@
 package com.hermes.agent.tool;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hermes.agent.approval.ApprovalService;
 import com.hermes.agent.approval.ApprovalSink;
 import com.hermes.agent.common.enums.ApprovalChoice;
@@ -7,15 +8,20 @@ import com.hermes.agent.common.enums.SafetyLevel;
 import com.hermes.agent.dto.ToolRequest;
 import com.hermes.agent.dto.ToolResponse;
 import com.hermes.agent.entity.ApprovalRequest;
+import com.hermes.agent.entity.ToolCall;
+import com.hermes.agent.service.ToolCallAuditService;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 
 /**
- * 工具执行器
+ * 工具执行器。
+ * 每次调用无论成功/失败/被拒/被禁都会落一条 ai_tool_call 审计（契约 §17.1）。
  */
 @Slf4j
 @Component
@@ -25,6 +31,8 @@ public class ToolExecutor {
     private final ToolRegistry toolRegistry;
     private final Guardrail guardrail;
     private final ApprovalService approvalService;
+    private final ToolCallAuditService auditService;
+    private final ObjectMapper objectMapper;
 
     /**
      * 无审批交互能力的调用（固定流程、定时任务）：WRITE/CONTROLLED 工具一律拒绝
@@ -40,7 +48,21 @@ public class ToolExecutor {
      */
     public ToolResponse execute(String toolCode, ToolRequest request, ApprovalSink approvalSink) {
         long startTime = System.currentTimeMillis();
+        ApprovalInfo approvalInfo = new ApprovalInfo();
+        ToolResponse response;
+        try {
+            response = executeInternal(toolCode, request, approvalSink, startTime, approvalInfo);
+        } catch (Exception e) {
+            log.error("工具执行失败: {}", toolCode, e);
+            response = errorResponse(toolCode, "EXECUTION_ERROR",
+                    "工具执行失败: " + e.getMessage(), startTime);
+        }
+        recordAudit(toolCode, request, response, approvalInfo, startTime);
+        return response;
+    }
 
+    private ToolResponse executeInternal(String toolCode, ToolRequest request, ApprovalSink approvalSink,
+                                         long startTime, ApprovalInfo approvalInfo) {
         // 1. 查找工具定义
         Optional<ToolDefinition> toolOpt = toolRegistry.getTool(toolCode);
         if (toolOpt.isEmpty()) {
@@ -61,20 +83,14 @@ public class ToolExecutor {
             return errorResponse(toolCode, "TOOL_FORBIDDEN", "该操作被禁止: " + toolCode, startTime);
         }
         if (requiresApproval(toolDef)) {
-            ToolResponse rejected = passApprovalGate(toolDef, request, approvalSink, startTime);
+            ToolResponse rejected = passApprovalGate(toolDef, request, approvalSink, startTime, approvalInfo);
             if (rejected != null) {
                 return rejected;
             }
         }
 
         // 4. 执行工具（当前用Mock）
-        try {
-            return mockExecute(toolCode, request, startTime);
-        } catch (Exception e) {
-            log.error("工具执行失败: {}", toolCode, e);
-            return errorResponse(toolCode, "EXECUTION_ERROR",
-                    "工具执行失败: " + e.getMessage(), startTime);
-        }
+        return mockExecute(toolCode, request, startTime);
     }
 
     private boolean requiresApproval(ToolDefinition toolDef) {
@@ -84,18 +100,22 @@ public class ToolExecutor {
 
     /**
      * 审批门：白名单/会话放行直接过；否则建单→推卡片→阻塞等应答。
+     * 无论放行还是拒绝，审批决策都会写入 approvalInfo 供审计落库。
      *
      * @return null 表示放行，非 null 为拒绝响应
      */
     private ToolResponse passApprovalGate(ToolDefinition toolDef, ToolRequest request,
-                                          ApprovalSink sink, long startTime) {
+                                          ApprovalSink sink, long startTime, ApprovalInfo approvalInfo) {
         String toolCode = toolDef.getToolCode();
         if (approvalService.isPreApproved(toolCode, request.getSessionId(), request.getUserId())) {
             log.info("工具 {} 命中免审（白名单或会话级放行）", toolCode);
+            approvalInfo.setChoice(approvalService.isSessionGranted(request.getSessionId(), toolCode)
+                    ? "session_grant" : "whitelist");
             return null;
         }
         if (sink == null) {
             log.warn("工具 {} 需人工审批，但调用方无审批交互能力，拒绝执行", toolCode);
+            approvalInfo.setChoice("required");
             return errorResponse(toolCode, "APPROVAL_REQUIRED",
                     "该操作需要人工审批，当前调用渠道不支持审批交互", startTime);
         }
@@ -103,6 +123,13 @@ public class ToolExecutor {
         ApprovalRequest card = approvalService.create(toolDef, request);
         sink.onApprovalRequest(card);
         ApprovalChoice choice = approvalService.await(card.getRequestId());
+        // 审批单已终结（行已落库），读回决策人/决策时间供审计
+        ApprovalRequest decided = approvalService.findByRequestId(card.getRequestId());
+        if (decided != null) {
+            approvalInfo.setChoice(decided.getChoice());
+            approvalInfo.setDecidedBy(decided.getDecidedBy());
+            approvalInfo.setDecideTime(decided.getDecideTime());
+        }
         if (choice.isAllowed()) {
             return null;
         }
@@ -170,5 +197,57 @@ public class ToolExecutor {
         response.setErrorMessage(errorMessage);
         response.setDurationMs(System.currentTimeMillis() - startTime);
         return response;
+    }
+
+    /**
+     * 审计落库（旁路：失败只记日志，不影响主流程）
+     */
+    private void recordAudit(String toolCode, ToolRequest request, ToolResponse response,
+                             ApprovalInfo approvalInfo, long startTime) {
+        try {
+            ToolCall call = new ToolCall();
+            call.setTraceId(request.getTraceId());
+            call.setSessionId(request.getSessionId());
+            call.setAgentCode(request.getAgentCode());
+            call.setToolCode(toolCode);
+            call.setSafetyLevel(toolRegistry.getTool(toolCode)
+                    .map(def -> def.getSafetyLevel() == null ? null : def.getSafetyLevel().name())
+                    .orElse(null));
+            call.setArguments(toJson(request.getArguments()));
+            call.setSuccess(Boolean.TRUE.equals(response.getSuccess()) ? 1 : 0);
+            call.setErrorCode(response.getErrorCode());
+            call.setDurationMs(response.getDurationMs() != null
+                    ? response.getDurationMs() : System.currentTimeMillis() - startTime);
+            call.setApprovalChoice(approvalInfo.getChoice());
+            call.setApprovalBy(approvalInfo.getDecidedBy());
+            call.setApprovalTime(approvalInfo.getDecideTime());
+            call.setChannel(channelOf(request));
+            auditService.record(call);
+        } catch (Exception e) {
+            log.error("组装工具调用审计失败: traceId={}, tool={}", request.getTraceId(), toolCode, e);
+        }
+    }
+
+    private String channelOf(ToolRequest request) {
+        return request.getChannel() == null || request.getChannel().isBlank()
+                ? "chat" : request.getChannel();
+    }
+
+    private String toJson(Map<String, Object> arguments) {
+        if (arguments == null || arguments.isEmpty()) {
+            return "{}";
+        }
+        try {
+            return objectMapper.writeValueAsString(arguments);
+        } catch (Exception e) {
+            return "{}";
+        }
+    }
+
+    @Data
+    private static class ApprovalInfo {
+        private String choice;
+        private Long decidedBy;
+        private LocalDateTime decideTime;
     }
 }

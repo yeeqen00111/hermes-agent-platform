@@ -17,6 +17,9 @@ public class AgentRunRequest {
 
     private String traceId;
 
+    /** 调用渠道：chat / flow / review，审计落库用 */
+    private String channel;
+
     /** 业务键（如评审任务UUID），用于固定流程运行记录关联 */
     private String bizKey;
 

@@ -49,6 +49,9 @@ public class ChatController {
             sessionId = UUID.randomUUID().toString();
         }
         final String sid = sessionId;
+        // 调用链ID必填（ai_tool_call.trace_id NOT NULL），未传则生成
+        final String effectiveTraceId = (traceId == null || traceId.isBlank())
+                ? UUID.randomUUID().toString() : traceId;
 
         // 创建或获取会话
         sessionManager.getSession(sid).orElseGet(() ->
@@ -62,7 +65,7 @@ public class ChatController {
         }
 
         // 普通对话，流式返回
-        return handleChatStream(sid, request, traceId, userId);
+        return handleChatStream(sid, request, effectiveTraceId, userId);
     }
 
     /**
@@ -157,6 +160,7 @@ public class ChatController {
                         .sessionId(sessionId)
                         .userInput(request.getMessage())
                         .traceId(traceId)
+                        .channel("chat")
                         .build();
 
                 AgentRunResult result = agentRuntime.stream(runRequest,

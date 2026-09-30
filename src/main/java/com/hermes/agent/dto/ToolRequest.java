@@ -39,6 +39,11 @@ public class ToolRequest {
     private String environment;
 
     /**
+     * 调用渠道：chat / flow / review
+     */
+    private String channel;
+
+    /**
      * 超时时间(ms)
      */
     private Integer timeoutMs = 10000;

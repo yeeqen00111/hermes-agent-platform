@@ -86,6 +86,7 @@ public class ReviewTaskService {
                     .userId(0L)
                     .bizKey(taskUuid)
                     .traceId("review-" + taskUuid)
+                    .channel("review")
                     .userInput("请对仓库 " + repo.getName() + " 分支 " + task.getBranch()
                             + " 区间 " + task.getStartRevision() + ".." + head + " 的提交进行代码评审，"
                             + "输出markdown评审报告，并在结尾附```json {\"scores\":{...},\"issues\":[...]} ```结构化块。")
