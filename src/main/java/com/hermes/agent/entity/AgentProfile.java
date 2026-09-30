@@ -104,6 +104,21 @@ public class AgentProfile extends BaseEntity {
     private String dataScopePolicy;
 
     /**
+     * 执行模式: LLM_DRIVEN/FIXED_FLOW
+     */
+    private String executionMode;
+
+    /**
+     * 固定流程定义（JSON）
+     */
+    private String flowDefinition;
+
+    /**
+     * 触发方式: CHAT/API/SCHEDULED/WEBHOOK
+     */
+    private String triggerType;
+
+    /**
      * 状态: DRAFT/PUBLISHED/DEPRECATED
      */
     private String status;

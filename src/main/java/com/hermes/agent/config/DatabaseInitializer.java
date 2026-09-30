@@ -35,6 +35,7 @@ public class DatabaseInitializer implements ApplicationRunner {
             try (Connection connection = dataSource.getConnection()) {
                 ClassPathResource resource = new ClassPathResource("db/schema-sqlite.sql");
                 ScriptUtils.executeSqlScript(connection, resource);
+                migrate(connection);
                 log.info("SQLite数据库表初始化完成");
             } catch (Exception e) {
                 log.error("数据库初始化失败", e);
@@ -42,6 +43,27 @@ public class DatabaseInitializer implements ApplicationRunner {
             }
         } else {
             log.info("非SQLite数据库，跳过自动建表（请手动执行schema.sql）");
+        }
+    }
+
+    /**
+     * 旧库增量迁移：加列语句幂等执行，列已存在则忽略
+     */
+    private void migrate(Connection connection) {
+        String[] migrations = {
+                "ALTER TABLE ai_agent_profile ADD COLUMN execution_mode VARCHAR(32) DEFAULT 'LLM_DRIVEN'",
+                "ALTER TABLE ai_agent_profile ADD COLUMN flow_definition TEXT",
+                "ALTER TABLE ai_agent_profile ADD COLUMN trigger_type VARCHAR(32) DEFAULT 'CHAT'",
+                "ALTER TABLE ai_agent_context_file ADD COLUMN agent_code VARCHAR(64)"
+        };
+        for (String sql : migrations) {
+            try (var stmt = connection.createStatement()) {
+                stmt.execute(sql);
+            } catch (java.sql.SQLException e) {
+                if (!e.getMessage().toLowerCase().contains("duplicate column")) {
+                    log.warn("迁移语句执行失败: {} -> {}", sql, e.getMessage());
+                }
+            }
         }
     }
 }

@@ -50,6 +50,13 @@
             <version>${mybatis-plus.version}</version>
         </dependency>
 
+        <!-- MyBatis-Plus 分页插件（3.5.9起独立artifact） -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+
         <!-- SQLite Driver (开发环境) -->
         <dependency>
             <groupId>org.xerial</groupId>

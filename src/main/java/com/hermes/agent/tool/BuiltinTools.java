@@ -1,6 +1,8 @@
 package com.hermes.agent.tool;
 
 import com.hermes.agent.common.enums.SafetyLevel;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -9,7 +11,15 @@ import java.util.*;
  * 内置工具定义（对齐原方案 §11.3）
  */
 @Component
+@RequiredArgsConstructor
 public class BuiltinTools {
+
+    private final ToolRegistry toolRegistry;
+
+    @PostConstruct
+    public void registerBuiltins() {
+        toolRegistry.registerAll(getBuiltinTools());
+    }
 
     /**
      * 获取所有内置工具定义

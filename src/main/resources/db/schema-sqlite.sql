@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS ai_agent_profile (
     enabled_mcp_servers TEXT,
     channel_bindings TEXT,
     data_scope_policy TEXT,
+    execution_mode VARCHAR(32) DEFAULT 'LLM_DRIVEN',
+    flow_definition TEXT,
+    trigger_type VARCHAR(32) DEFAULT 'CHAT',
     status VARCHAR(32) DEFAULT 'DRAFT',
     current_version INT DEFAULT 1,
     del_flag TINYINT DEFAULT 0,
@@ -54,6 +57,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_context_file (
     file_type VARCHAR(32) NOT NULL,
     content TEXT NOT NULL,
     scope VARCHAR(32) DEFAULT 'GLOBAL',
+    agent_code VARCHAR(64),
     environment VARCHAR(32),
     version INT DEFAULT 1,
     del_flag TINYINT DEFAULT 0,
@@ -207,6 +211,15 @@ CREATE TABLE IF NOT EXISTS ai_model (
 
 CREATE INDEX IF NOT EXISTS idx_model_provider ON ai_model(provider_code);
 
+-- 种子模型供应商（密钥只存环境变量引用，未配置时Gateway回退mock）
+INSERT OR IGNORE INTO ai_model_provider (provider_code, name, base_url, api_key_ref, enabled) VALUES
+('deepseek', 'DeepSeek', 'https://api.deepseek.com', 'DEEPSEEK_API_KEY', 1),
+('glm', '智谱GLM', 'https://open.bigmodel.cn/api/paas/v4', 'GLM_API_KEY', 1);
+
+INSERT OR IGNORE INTO ai_model (provider_code, model_name, context_window, supports_tools, enabled) VALUES
+('deepseek', 'deepseek-chat', 64000, 1, 1),
+('glm', 'glm-4-flash', 128000, 1, 1);
+
 -- 会话表
 CREATE TABLE IF NOT EXISTS ai_chat_session (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -286,3 +299,238 @@ INSERT OR IGNORE INTO ai_config_version (scope, version) VALUES
 ('model', 1),
 ('command', 1),
 ('channel', 1);
+
+-- ============================================
+-- 身份包（Persona）：记忆 / 用户画像
+-- ============================================
+
+-- 记忆存储表（三层：AGENT/USER/SESSION）
+CREATE TABLE IF NOT EXISTS ai_agent_memory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_code VARCHAR(64) NOT NULL,
+    scope VARCHAR(16) NOT NULL,
+    scope_key VARCHAR(128) NOT NULL DEFAULT '',
+    memory_key VARCHAR(128) NOT NULL,
+    content TEXT NOT NULL,
+    source VARCHAR(32),
+    hit_count INT DEFAULT 0,
+    last_hit_time DATETIME,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_code, scope, scope_key, memory_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_agent ON ai_agent_memory(agent_code, scope);
+
+-- 用户画像表（USER身份层）
+CREATE TABLE IF NOT EXISTS ai_agent_user_profile (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id BIGINT NOT NULL UNIQUE,
+    profile_text TEXT,
+    preferences TEXT,
+    data_scope TEXT,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- 固定流程编排（FIXED_FLOW）运行与步骤日志
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_flow_run (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id VARCHAR(64) NOT NULL UNIQUE,
+    agent_code VARCHAR(64) NOT NULL,
+    biz_key VARCHAR(128),
+    status VARCHAR(32) DEFAULT 'RUNNING',
+    input TEXT,
+    output TEXT,
+    error_message VARCHAR(1000),
+    start_time DATETIME,
+    end_time DATETIME,
+    duration_ms BIGINT,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_flow_run_agent ON ai_flow_run(agent_code);
+
+CREATE TABLE IF NOT EXISTS ai_flow_step_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id VARCHAR(64) NOT NULL,
+    step_code VARCHAR(64) NOT NULL,
+    step_name VARCHAR(128),
+    step_type VARCHAR(32),
+    upstream_step VARCHAR(64),
+    status VARCHAR(32) DEFAULT 'RUNNING',
+    input TEXT,
+    output TEXT,
+    error_message VARCHAR(1000),
+    start_time DATETIME,
+    end_time DATETIME,
+    duration_ms BIGINT,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_flow_step_run ON ai_flow_step_log(run_id);
+
+-- ============================================
+-- 代码评审模块（本期目标）
+-- ============================================
+
+-- 凭据表：只存引用，不存明文
+CREATE TABLE IF NOT EXISTS cr_credential (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cred_code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    cred_type VARCHAR(32) NOT NULL,
+    username VARCHAR(128),
+    secret_ref VARCHAR(256) NOT NULL,
+    enabled TINYINT DEFAULT 1,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 代码仓库表
+CREATE TABLE IF NOT EXISTS cr_repository (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    repo_url VARCHAR(500) NOT NULL,
+    default_branch VARCHAR(128) DEFAULT 'master',
+    credential_id BIGINT,
+    workspace_dir VARCHAR(500),
+    last_sync_time DATETIME,
+    last_revision VARCHAR(64),
+    review_prompt_extra TEXT,
+    enabled TINYINT DEFAULT 1,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 评审规则表（触发方式/参与仓库/参与人员）
+CREATE TABLE IF NOT EXISTS cr_review_rule (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    trigger_type VARCHAR(32) NOT NULL,
+    cron_expr VARCHAR(64),
+    repo_ids TEXT,
+    branch_filter VARCHAR(256),
+    participant_ids TEXT,
+    enabled TINYINT DEFAULT 1,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 评审任务表（状态机）
+CREATE TABLE IF NOT EXISTS cr_review_task (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_uuid VARCHAR(64) NOT NULL UNIQUE,
+    rule_id BIGINT,
+    repo_id BIGINT NOT NULL,
+    branch VARCHAR(128),
+    start_revision VARCHAR(64),
+    end_revision VARCHAR(64),
+    status VARCHAR(32) DEFAULT 'PENDING',
+    trigger_type VARCHAR(32),
+    trigger_by VARCHAR(64),
+    last_report_id BIGINT,
+    dispatch_time DATETIME,
+    finish_time DATETIME,
+    error_message VARCHAR(1000),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_task_status ON cr_review_task(status);
+CREATE INDEX IF NOT EXISTS idx_review_task_repo ON cr_review_task(repo_id);
+
+-- 评审报告表
+CREATE TABLE IF NOT EXISTS cr_review_report (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_uuid VARCHAR(64) NOT NULL,
+    report_markdown TEXT NOT NULL,
+    scores TEXT,
+    model_name VARCHAR(64),
+    review_round INT DEFAULT 1,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_report_task ON cr_review_report(task_uuid);
+
+-- 评审问题表（复审闭环）
+CREATE TABLE IF NOT EXISTS cr_review_issue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_uuid VARCHAR(64) NOT NULL,
+    report_id BIGINT,
+    severity VARCHAR(32),
+    category VARCHAR(64),
+    title VARCHAR(500),
+    file_path VARCHAR(500),
+    line_no INT,
+    status VARCHAR(32) DEFAULT 'OPEN',
+    recheck_note VARCHAR(1000),
+    del_flag TINYINT DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_issue_task ON cr_review_issue(task_uuid);
+
+-- ============================================
+-- 种子身份包：单一基座上的功能智能体 = 身份配置
+-- ============================================
+
+INSERT OR IGNORE INTO ai_agent_profile
+(agent_code, name, description, model_provider, model_name, execution_mode, trigger_type,
+ enabled_tools, memory_policy, status) VALUES
+('assistant', '通用运维助手', '默认对话身份：日志/告警/配置查询与处置', 'deepseek', 'deepseek-chat',
+ 'LLM_DRIVEN', 'CHAT',
+ '["log.search","log.context","log.aggregate","alert.query","knowledge.search"]',
+ '{"injectTopK":10,"writeback":true}', 'PUBLISHED'),
+('code-reviewer', '代码评审专家', 'API/WEBHOOK/SCHEDULED触发的代码评审身份，输出markdown多维评分报告', 'deepseek', 'deepseek-chat',
+ 'LLM_DRIVEN', 'API',
+ '["knowledge.search"]',
+ '{"injectTopK":5,"writeback":false}', 'PUBLISHED'),
+('report-analyst', '报表分析员', '固定流程编排身份：聚合日志→生成告警报表摘要', 'deepseek', 'deepseek-chat',
+ 'FIXED_FLOW', 'SCHEDULED',
+ '["log.aggregate","alert.query"]',
+ '{"injectTopK":0,"writeback":false}', 'PUBLISHED');
+
+UPDATE ai_agent_profile SET flow_definition = '{"steps":[{"code":"aggregate","name":"告警日志聚合","type":"TOOL","toolCode":"log.aggregate"},{"code":"summarize","name":"报表摘要生成","type":"LLM","upstream":"aggregate","promptTemplate":"你是报表分析员。基于以下聚合数据生成告警报表摘要（markdown）：\n{{prev}}"}]}' WHERE agent_code = 'report-analyst';
+
+INSERT OR IGNORE INTO ai_agent_context_file (file_type, content, scope, agent_code) VALUES
+('SOUL', '# SOUL
+你是HERMES平台上的通用运维助手。
+使命：帮助运维/开发人员查询日志、告警、配置并给出处置建议。
+边界：只读操作可直接执行；受控/写操作必须走审批；禁止操作不暴露。
+语气：简洁、专业、结论先行。', 'AGENT', 'assistant'),
+('AGENTS', '# AGENTS
+环境约定：所有查询结果必须带引用(citations)；被截断的数据要声明truncated；时间默认使用东八区。', 'AGENT', 'assistant'),
+('SOUL', '# SOUL
+你是一名资深代码评审专家。
+使命：对指定仓库分支区间内的提交进行评审，输出markdown报告与多维评分（健壮性/BUG/安全/可维护性/性能）。
+边界：只读代码；不修改仓库；问题必须给出文件与行号证据。
+流程：获取git提交信息→执行代码审查（系统提示词+仓库提示词）→报告回传。', 'AGENT', 'code-reviewer'),
+('AGENTS', '# AGENTS
+评审约定：遵循仓库review_prompt_extra中的仓库级规范；评分0-100；每个问题标注severity(BLOCKER/CRITICAL/MAJOR/MINOR)与category。', 'AGENT', 'code-reviewer'),
+('SOUL', '# SOUL
+你是报表分析员，按固定流程执行：聚合→摘要。不做流程外推理。', 'AGENT', 'report-analyst');

@@ -30,6 +30,9 @@ CREATE TABLE ai_agent_profile (
     enabled_mcp_servers JSON COMMENT '挂载的MCP服务器',
     channel_bindings JSON COMMENT '绑定的渠道',
     data_scope_policy JSON COMMENT '数据范围策略',
+    execution_mode VARCHAR(32) DEFAULT 'LLM_DRIVEN' COMMENT '执行模式: LLM_DRIVEN/FIXED_FLOW',
+    flow_definition JSON COMMENT '固定流程定义(FIXED_FLOW)',
+    trigger_type VARCHAR(32) DEFAULT 'CHAT' COMMENT '触发方式: CHAT/API/SCHEDULED/WEBHOOK',
     status VARCHAR(32) DEFAULT 'DRAFT' COMMENT '状态: DRAFT/PUBLISHED/DEPRECATED',
     current_version INT DEFAULT 1 COMMENT '当前发布版本号',
     del_flag TINYINT DEFAULT 0 COMMENT '删除标记',
@@ -59,7 +62,8 @@ CREATE TABLE ai_agent_context_file (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     file_type VARCHAR(32) NOT NULL COMMENT '文件类型: AGENTS/SOUL',
     content TEXT NOT NULL COMMENT '文件内容',
-    scope VARCHAR(32) DEFAULT 'GLOBAL' COMMENT '作用域: GLOBAL/ENVIRONMENT',
+    scope VARCHAR(32) DEFAULT 'GLOBAL' COMMENT '作用域: GLOBAL/AGENT',
+    agent_code VARCHAR(64) COMMENT '身份包归属Agent(scope=AGENT)',
     environment VARCHAR(32) COMMENT '环境标识',
     version INT DEFAULT 1 COMMENT '版本号',
     del_flag TINYINT DEFAULT 0 COMMENT '删除标记',
@@ -308,3 +312,203 @@ INSERT INTO ai_config_version (scope, version) VALUES
 ('command', 1),
 ('channel', 1)
 ON DUPLICATE KEY UPDATE version = version;
+
+-- ============================================
+-- 身份包（Persona）：记忆 / 用户画像
+-- ============================================
+
+CREATE TABLE ai_agent_memory (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    agent_code VARCHAR(64) NOT NULL COMMENT 'Agent编码',
+    scope VARCHAR(16) NOT NULL COMMENT 'AGENT/USER/SESSION',
+    scope_key VARCHAR(128) NOT NULL DEFAULT '' COMMENT '作用域键',
+    memory_key VARCHAR(128) NOT NULL COMMENT '记忆键',
+    content TEXT NOT NULL COMMENT '记忆内容',
+    source VARCHAR(32) COMMENT '来源',
+    hit_count INT DEFAULT 0 COMMENT '命中次数',
+    last_hit_time DATETIME COMMENT '最后命中时间',
+    del_flag TINYINT DEFAULT 0 COMMENT '删除标记',
+    create_by VARCHAR(64), create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64), update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_memory (agent_code, scope, scope_key, memory_key),
+    INDEX idx_memory_agent (agent_code, scope)
+) ENGINE=InnoDB COMMENT='记忆存储表';
+
+CREATE TABLE ai_agent_user_profile (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    user_id BIGINT NOT NULL UNIQUE COMMENT '用户ID',
+    profile_text TEXT COMMENT '用户画像',
+    preferences JSON COMMENT '偏好',
+    data_scope JSON COMMENT '默认数据范围',
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64), create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64), update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB COMMENT='用户画像表';
+
+-- ============================================
+-- 固定流程编排运行与步骤日志
+-- ============================================
+
+CREATE TABLE ai_flow_run (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    run_id VARCHAR(64) NOT NULL UNIQUE COMMENT '运行ID',
+    agent_code VARCHAR(64) NOT NULL COMMENT 'Agent编码',
+    biz_key VARCHAR(128) COMMENT '业务键',
+    status VARCHAR(32) DEFAULT 'RUNNING' COMMENT 'RUNNING/SUCCESS/FAILED',
+    input TEXT, output TEXT,
+    error_message VARCHAR(1000),
+    start_time DATETIME, end_time DATETIME, duration_ms BIGINT,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_flow_run_agent (agent_code)
+) ENGINE=InnoDB COMMENT='固定流程运行记录';
+
+CREATE TABLE ai_flow_step_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    run_id VARCHAR(64) NOT NULL COMMENT '运行ID',
+    step_code VARCHAR(64) NOT NULL COMMENT '步骤编码',
+    step_name VARCHAR(128) COMMENT '步骤名称',
+    step_type VARCHAR(32) COMMENT 'TOOL/LLM',
+    upstream_step VARCHAR(64) COMMENT '上游步骤',
+    status VARCHAR(32) DEFAULT 'RUNNING' COMMENT 'RUNNING/SUCCESS/FAILED',
+    input TEXT, output TEXT,
+    error_message VARCHAR(1000),
+    start_time DATETIME, end_time DATETIME, duration_ms BIGINT,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_flow_step_run (run_id)
+) ENGINE=InnoDB COMMENT='固定流程步骤日志';
+
+-- ============================================
+-- 代码评审模块
+-- ============================================
+
+CREATE TABLE cr_credential (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    cred_code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    cred_type VARCHAR(32) NOT NULL COMMENT 'GIT_TOKEN/GIT_PASSWORD/API_KEY',
+    username VARCHAR(128),
+    secret_ref VARCHAR(256) NOT NULL COMMENT '密钥引用，不存明文',
+    enabled TINYINT DEFAULT 1,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64), create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64), update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB COMMENT='代码仓库凭据表';
+
+CREATE TABLE cr_repository (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    repo_code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    repo_url VARCHAR(500) NOT NULL,
+    default_branch VARCHAR(128) DEFAULT 'master',
+    credential_id BIGINT,
+    workspace_dir VARCHAR(500),
+    last_sync_time DATETIME,
+    last_revision VARCHAR(64),
+    review_prompt_extra TEXT COMMENT '仓库级评审提示词',
+    enabled TINYINT DEFAULT 1,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64), create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64), update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB COMMENT='代码仓库表';
+
+CREATE TABLE cr_review_rule (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    rule_code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    trigger_type VARCHAR(32) NOT NULL COMMENT 'WEBHOOK/SCHEDULED/MANUAL',
+    cron_expr VARCHAR(64),
+    repo_ids JSON COMMENT '参与仓库',
+    branch_filter VARCHAR(256),
+    participant_ids JSON COMMENT '参与人员',
+    enabled TINYINT DEFAULT 1,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64), create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64), update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB COMMENT='评审规则表';
+
+CREATE TABLE cr_review_task (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    task_uuid VARCHAR(64) NOT NULL UNIQUE COMMENT '唯一评审任务ID',
+    rule_id BIGINT,
+    repo_id BIGINT NOT NULL,
+    branch VARCHAR(128),
+    start_revision VARCHAR(64),
+    end_revision VARCHAR(64),
+    status VARCHAR(32) DEFAULT 'PENDING' COMMENT 'PENDING/REVIEWING/FIRST_REVIEW_DONE/RE_REVIEWING/RE_REVIEW_DONE/CLOSED/FAILED',
+    trigger_type VARCHAR(32),
+    trigger_by VARCHAR(64),
+    last_report_id BIGINT,
+    dispatch_time DATETIME, finish_time DATETIME,
+    error_message VARCHAR(1000),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64), create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64), update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_task_status (status), INDEX idx_task_repo (repo_id)
+) ENGINE=InnoDB COMMENT='评审任务表';
+
+CREATE TABLE cr_review_report (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    task_uuid VARCHAR(64) NOT NULL,
+    report_markdown LONGTEXT NOT NULL,
+    scores JSON COMMENT '多维评分',
+    model_name VARCHAR(64),
+    review_round INT DEFAULT 1,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_report_task (task_uuid)
+) ENGINE=InnoDB COMMENT='评审报告表';
+
+CREATE TABLE cr_review_issue (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    task_uuid VARCHAR(64) NOT NULL,
+    report_id BIGINT,
+    severity VARCHAR(32),
+    category VARCHAR(64),
+    title VARCHAR(500),
+    file_path VARCHAR(500),
+    line_no INT,
+    status VARCHAR(32) DEFAULT 'OPEN' COMMENT 'OPEN/FIXED/WONT_FIX/CLOSED',
+    recheck_note VARCHAR(1000),
+    del_flag TINYINT DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_issue_task (task_uuid)
+) ENGINE=InnoDB COMMENT='评审问题表';
+
+-- ============================================
+-- 种子身份包与模型供应商
+-- ============================================
+
+INSERT IGNORE INTO ai_model_provider (provider_code, name, base_url, api_key_ref, enabled) VALUES
+('deepseek', 'DeepSeek', 'https://api.deepseek.com', 'DEEPSEEK_API_KEY', 1),
+('glm', '智谱GLM', 'https://open.bigmodel.cn/api/paas/v4', 'GLM_API_KEY', 1);
+
+INSERT IGNORE INTO ai_model (provider_code, model_name, context_window, supports_tools, enabled) VALUES
+('deepseek', 'deepseek-chat', 64000, 1, 1),
+('glm', 'glm-4-flash', 128000, 1, 1);
+
+INSERT IGNORE INTO ai_agent_profile
+(agent_code, name, description, model_provider, model_name, execution_mode, trigger_type,
+ enabled_tools, memory_policy, status) VALUES
+('assistant', '通用运维助手', '默认对话身份：日志/告警/配置查询与处置', 'deepseek', 'deepseek-chat',
+ 'LLM_DRIVEN', 'CHAT',
+ '["log.search","log.context","log.aggregate","alert.query","knowledge.search"]',
+ '{"injectTopK":10,"writeback":true}', 'PUBLISHED'),
+('code-reviewer', '代码评审专家', 'API/WEBHOOK/SCHEDULED触发的代码评审身份', 'deepseek', 'deepseek-chat',
+ 'LLM_DRIVEN', 'API',
+ '["knowledge.search"]',
+ '{"injectTopK":5,"writeback":false}', 'PUBLISHED'),
+('report-analyst', '报表分析员', '固定流程编排身份：聚合日志→生成告警报表摘要', 'deepseek', 'deepseek-chat',
+ 'FIXED_FLOW', 'SCHEDULED',
+ '["log.aggregate","alert.query"]',
+ '{"injectTopK":0,"writeback":false}', 'PUBLISHED');
+
+UPDATE ai_agent_profile SET flow_definition =
+ '{"steps":[{"code":"aggregate","name":"告警日志聚合","type":"TOOL","toolCode":"log.aggregate"},{"code":"summarize","name":"报表摘要生成","type":"LLM","upstream":"aggregate","promptTemplate":"你是报表分析员。基于以下聚合数据生成告警报表摘要（markdown）：\\n{{prev}}"}]}'
+ WHERE agent_code = 'report-analyst';
+
+INSERT IGNORE INTO ai_agent_context_file (file_type, content, scope, agent_code) VALUES
+('SOUL', '# SOUL\n你是HERMES平台上的通用运维助手。\n使命：帮助运维/开发人员查询日志、告警、配置并给出处置建议。\n边界：只读操作可直接执行；受控/写操作必须走审批；禁止操作不暴露。\n语气：简洁、专业、结论先行。', 'AGENT', 'assistant'),
+('AGENTS', '# AGENTS\n环境约定：所有查询结果必须带引用(citations)；被截断的数据要声明truncated；时间默认使用东八区。', 'AGENT', 'assistant'),
+('SOUL', '# SOUL\n你是一名资深代码评审专家。\n使命：对指定仓库分支区间内的提交进行评审，输出markdown报告与多维评分（健壮性/BUG/安全/可维护性/性能）。\n边界：只读代码；不修改仓库；问题必须给出文件与行号证据。\n流程：获取git提交信息→执行代码审查（系统提示词+仓库提示词）→报告回传。', 'AGENT', 'code-reviewer'),
+('AGENTS', '# AGENTS\n评审约定：遵循仓库review_prompt_extra中的仓库级规范；评分0-100；每个问题标注severity(BLOCKER/CRITICAL/MAJOR/MINOR)与category。', 'AGENT', 'code-reviewer'),
+('SOUL', '# SOUL\n你是报表分析员，按固定流程执行：聚合→摘要。不做流程外推理。', 'AGENT', 'report-analyst');

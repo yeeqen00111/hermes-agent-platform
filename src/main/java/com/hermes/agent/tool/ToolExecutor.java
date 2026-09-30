@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -35,9 +36,9 @@ public class ToolExecutor {
 
         // 2. Guardrail校验
         var validationResult = guardrail.validate(toolDef, request);
-        if (!validationResult.isValid()) {
-            return errorResponse(toolCode, validationResult.getErrorCode(),
-                    validationResult.getErrorMessage(), startTime);
+        if (!validationResult.valid()) {
+            return errorResponse(toolCode, validationResult.errorCode(),
+                    validationResult.errorMessage(), startTime);
         }
 
         // 3. WRITE级工具需要审批

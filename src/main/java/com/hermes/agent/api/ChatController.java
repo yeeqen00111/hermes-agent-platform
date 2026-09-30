@@ -3,6 +3,9 @@ package com.hermes.agent.api;
 import com.hermes.agent.command.CommandRouter;
 import com.hermes.agent.dto.SSEEvent;
 import com.hermes.agent.common.enums.SSEEventType;
+import com.hermes.agent.runtime.AgentRunRequest;
+import com.hermes.agent.runtime.AgentRunResult;
+import com.hermes.agent.runtime.AgentRuntime;
 import com.hermes.agent.session.SessionManager;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +30,7 @@ public class ChatController {
 
     private final SessionManager sessionManager;
     private final CommandRouter commandRouter;
+    private final AgentRuntime agentRuntime;
 
     /**
      * 发送消息（SSE流式返回）
@@ -40,20 +44,21 @@ public class ChatController {
         if (sessionId == null || sessionId.isEmpty()) {
             sessionId = UUID.randomUUID().toString();
         }
+        final String sid = sessionId;
 
         // 创建或获取会话
-        sessionManager.getSession(sessionId).orElseGet(() ->
-                sessionManager.createSession(sessionId, userId != null ? userId : 0L, request.getAgentCode()));
+        sessionManager.getSession(sid).orElseGet(() ->
+                sessionManager.createSession(sid, userId != null ? userId : 0L, request.getAgentCode()));
 
         // 检查是否是指令
         CommandRouter.CommandResult cmdResult = commandRouter.route(request.getMessage());
         if (cmdResult != null) {
             // 是指令，直接返回结果
-            return handleCommandResponse(sessionId, cmdResult);
+            return handleCommandResponse(sid, cmdResult);
         }
 
         // 普通对话，流式返回
-        return handleChatStream(sessionId, request, traceId);
+        return handleChatStream(sid, request, traceId, userId);
     }
 
     /**
@@ -125,73 +130,63 @@ public class ChatController {
     }
 
     /**
-     * 处理聊天流（Mock实现）
+     * 处理聊天流：交给单一基座 AgentRuntime（身份包 + LLM_DRIVEN/FIXED_FLOW）
      */
-    private SseEmitter handleChatStream(String sessionId, ChatRequest request, String traceId) {
-        SseEmitter emitter = new SseEmitter(60000L);
+    private SseEmitter handleChatStream(String sessionId, ChatRequest request, String traceId, Long userId) {
+        SseEmitter emitter = new SseEmitter(120000L);
 
-        // 异步处理（实际应该交给Planner和LLM Gateway）
+        SessionManager.ChatMessage userMsg = new SessionManager.ChatMessage();
+        userMsg.setMessageId(UUID.randomUUID().toString());
+        userMsg.setRole("USER");
+        userMsg.setContent(request.getMessage());
+        userMsg.setTraceId(traceId);
+        sessionManager.addMessage(sessionId, userMsg);
+
         new Thread(() -> {
             try {
-                // 模拟思考过程
-                emitter.send(SseEmitter.event()
-                        .name(SSEEventType.REASONING_DELTA.getType())
-                        .data("正在分析问题..."));
+                AgentRunRequest runRequest = AgentRunRequest.builder()
+                        .agentCode(request.getAgentCode())
+                        .userId(userId != null ? userId : 0L)
+                        .sessionId(sessionId)
+                        .userInput(request.getMessage())
+                        .traceId(traceId)
+                        .build();
 
-                Thread.sleep(500);
+                AgentRunResult result = agentRuntime.stream(runRequest,
+                        delta -> sendQuietly(emitter, SSEEventType.MESSAGE_DELTA, delta),
+                        event -> sendQuietly(emitter,
+                                event.isSuccess() ? SSEEventType.TOOL_COMPLETE : SSEEventType.TOOL_START,
+                                Map.of("tool", event.getToolCode(),
+                                        "success", event.isSuccess(),
+                                        "error", event.getErrorMessage() == null ? "" : event.getErrorMessage())));
 
-                // 模拟工具调用
-                emitter.send(SseEmitter.event()
-                        .name(SSEEventType.TOOL_START.getType())
-                        .data(Map.of("tool", "log.search")));
+                SessionManager.ChatMessage assistantMsg = new SessionManager.ChatMessage();
+                assistantMsg.setMessageId(UUID.randomUUID().toString());
+                assistantMsg.setRole("ASSISTANT");
+                assistantMsg.setContent(result.getReply());
+                assistantMsg.setTraceId(traceId);
+                sessionManager.addMessage(sessionId, assistantMsg);
 
-                Thread.sleep(300);
-
-                emitter.send(SseEmitter.event()
-                        .name(SSEEventType.TOOL_COMPLETE.getType())
-                        .data(Map.of("tool", "log.search", "success", true)));
-
-                // 模拟回答
-                String response = "这是Mock回答。您问的是：" + request.getMessage();
-                for (int i = 0; i < response.length(); i += 5) {
-                    int end = Math.min(i + 5, response.length());
-                    emitter.send(SseEmitter.event()
-                            .name(SSEEventType.MESSAGE_DELTA.getType())
-                            .data(response.substring(i, end)));
-                    Thread.sleep(50);
-                }
-
-                // 发送引用
-                emitter.send(SseEmitter.event()
-                        .name(SSEEventType.CITATIONS.getType())
-                        .data(List.of(Map.of(
-                                "kind", "log",
-                                "source", "mock-source",
-                                "title", "Mock Citation",
-                                "locator", "mock-001"
-                        ))));
-
-                // 完成
                 emitter.send(SseEmitter.event()
                         .name(SSEEventType.MESSAGE_COMPLETE.getType())
-                        .data(Map.of("sessionId", sessionId)));
-
+                        .data(Map.of("sessionId", sessionId,
+                                "toolEvents", result.getToolEvents(),
+                                "fixedFlow", result.isFixedFlow())));
                 emitter.complete();
-
-                // 保存消息到会话
-                SessionManager.ChatMessage userMsg = new SessionManager.ChatMessage();
-                userMsg.setMessageId(UUID.randomUUID().toString());
-                userMsg.setRole("USER");
-                userMsg.setContent(request.getMessage());
-                userMsg.setTraceId(traceId);
-                sessionManager.addMessage(sessionId, userMsg);
-
-            } catch (IOException | InterruptedException e) {
+            } catch (IOException e) {
                 emitter.completeWithError(e);
             }
         }).start();
 
         return emitter;
+    }
+
+    private void sendQuietly(SseEmitter emitter, SSEEventType type, Object data) {
+        try {
+            emitter.send(SseEmitter.event().name(type.getType()).data(data));
+        } catch (IOException e) {
+            log.debug("SSE发送失败: {}", e.getMessage());
+        }
     }
 
     @Data

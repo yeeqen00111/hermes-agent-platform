@@ -1,175 +1,84 @@
-# HERMES Agent Platform
+# HERMES Agent Platform（智能体基座）
 
-HERMES智能运维平台 - 自研智能体运行时
+单一智能体基座：平台上所有功能智能体（代码评审 / 智能运维 / 报表 / 问数）共用同一个运行时
+`AgentRuntime`，彼此之间仅通过**身份包（Persona）**区分——不维护多套技术栈的 Agent。
 
-## 项目简介
+## 单一基座 + 身份包
 
-这是HERMES智能运维平台的智能体部分，负责：
-- 对话编排与SSE流式输出
-- 14个受控工具的调用与审批
-- Agent/技能/指令配置管理
-- 渠道对话接入（飞书/钉钉/企微）
-- 审计与安全防护
+| 身份层 | 存储 | 注入方式 |
+|---|---|---|
+| SOUL（角色/使命/边界/语气） | `ai_agent_context_file` file_type=SOUL | 系统提示主体 |
+| AGENTS（环境与仓库约定） | `ai_agent_context_file` file_type=AGENTS | 追加系统提示 |
+| MEMORY（记忆策略+三层记忆） | `ai_agent_profile.memory_policy` + `ai_agent_memory`(AGENT/USER/SESSION) | 上下文块，按策略注入/写回 |
+| USER（用户画像/数据范围） | `ai_agent_user_profile` | 按 X-Actor-User-Id 请求级注入 |
+| 能力绑定 | `ai_agent_profile` enabled_tools/skills/mcp/kb/commands | 工具注册表过滤 |
 
-**注意**：本项目不包含Java平台侧的数据面功能（日志采集、告警、Nacos监控等），那些由`aiagent-backend`负责。
+执行模式（`execution_mode`）：
+- `LLM_DRIVEN`：ReAct 循环（模型可发起 ```tool_call``` 围栏调用工具，最多4轮）
+- `FIXED_FLOW`：确定性步骤编排（`flow_definition`，步骤类型 TOOL/LLM），每步落库
+  `ai_flow_step_log`（状态/耗时/上下游/错误原因），供看板监控与告警
 
-## 技术栈
+触发方式（`trigger_type`）：CHAT / API / SCHEDULED / WEBHOOK。
+代码评审身份 `code-reviewer` 为 API+WEBHOOK+SCHEDULED 触发，不直接面向用户对话。
 
-- Java 21
-- Spring Boot 3.5
-- MyBatis-Plus 3.5.9
-- SQLite（开发）/ MySQL（生产）
+身份包内容为 Markdown，可通过 `/api/personas/{code}/preview` 预览组装结果，
+也可导出为 SOUL.md / AGENTS.md 文件（DB 存储保证多实例一致、版本快照与热更新）。
 
-## 快速开始
+## 代码评审模块（本期目标）
 
-### 前置要求
+流程：触发（人工/WEBHOOK/定期扫描）→ 平台准备（仓库同步 + 提交区间 + 上次报告 + 仓库提示词）
+→ 调用基座 `code-reviewer` 身份 → 报告回传（markdown + 多维评分 + 问题清单）→ 人工复审 → 闭环。
 
-- JDK 21+
-- Maven 3.8+
+状态机：`PENDING → REVIEWING → FIRST_REVIEW_DONE → RE_REVIEWING → RE_REVIEW_DONE → CLOSED`，
+失败/超时统一走失败回调置 `FAILED`（回调契约：成功与失败都必须回传）。
 
-### 启动步骤
+平台侧隔离层持有凭据（`cr_credential.secret_ref` 只存环境变量引用，明文不落库、不进日志、
+错误信息脱敏），Agent 只拿到提交列表与 diff 统计。
 
-1. **克隆仓库**
+主要 API（`/api/review`）：
+- `POST /credentials`、`GET /credentials` 凭据管理
+- `POST /repos`、`GET /repos`、`POST /repos/{id}/sync` 仓库下载/更新
+- `POST /rules`、`GET /rules` 评审规则（触发方式/参与仓库/参与人员）
+- `POST /tasks` 人工触发；`GET /tasks[?status]`、`GET /tasks/{uuid}`
+- `POST /tasks/{uuid}/report`、`POST /tasks/{uuid}/failure` Agent 回传回调
+- `POST /tasks/{uuid}/re-review`、`POST /tasks/{uuid}/close` 复审与闭环
+- `POST /webhook` GitLab/极狐 webhook 入口
+- `POST /issues/{id}/status` 问题处置（OPEN/FIXED/WONT_FIX/CLOSED）
+
+## 其他 API
+
+- `POST /api/chat`（SSE：message.delta / tool.start / tool.complete / citations /
+  approval.request / message.complete / chat.error）、`GET /api/sessions`、
+  `GET /api/sessions/{id}/messages`、`POST /api/sessions/{id}/interrupt|feedback`
+- `/api/agent-profiles`、`/api/skills` 配置与发布
+- `/api/personas/{code}/preview|context-files|memories|profile`、`/api/personas/user-profiles`
+
+## 运行
+
+开发期零外部依赖（SQLite + 无 Redis）：
+
 ```bash
-git clone https://github.com/yeeqen00111/hermes-agent-platform.git
-cd hermes-agent-platform
+mvn spring-boot:run     # 端口8081，自动建表与种子身份包
 ```
 
-2. **编译打包**
-```bash
-mvn clean package -DskipTests
-```
+- 模型：`ai_model_provider` 种子 deepseek / glm，`api_key_ref` 为环境变量名
+  （`DEEPSEEK_API_KEY` / `GLM_API_KEY`）；未配置密钥时 LLM Gateway 自动回退 mock，
+  全流程仍可跑通。
+- 生产：执行 `src/main/resources/db/schema.sql`（MySQL/OceanBase MySQL 模式），
+  Docker compose 单租户多实例部署。
 
-3. **运行应用**
-```bash
-java -jar target/hermes-agent-platform-0.1.0-SNAPSHOT.jar
-```
-
-或使用Maven直接运行：
-```bash
-mvn spring-boot:run
-```
-
-4. **访问API**
-- Chat API: `POST http://localhost:8081/api/chat`
-- 会话列表: `GET http://localhost:8081/api/sessions?userId=1`
-
-### 测试示例
-
-```bash
-curl -X POST http://localhost:8081/api/chat \
-  -H "Content-Type: application/json" \
-  -H "X-Actor-User-Id: 1" \
-  -H "X-Trace-Id: test-trace-001" \
-  -d '{
-    "message": "帮我查一下payment-service的错误日志",
-    "agentCode": "ops-assistant"
-  }'
-```
-
-## 项目结构
+## 结构
 
 ```
-src/main/java/com/hermes/agent/
-├── api/                    # REST API控制器
-│   └── ChatController.java
-├── command/                # 斜杠指令系统
-│   └── CommandRouter.java
-├── common/                 # 通用类
-│   ├── enums/             # 枚举定义
-│   └── BaseEntity.java
-├── config/                 # 配置类
-│   ├── ConfigCenter.java  # 配置版本中心
-│   ├── DatabaseInitializer.java
-│   └── MybatisPlusConfig.java
-├── dto/                    # 数据传输对象
-│   ├── ToolRequest.java
-│   ├── ToolResponse.java
-│   └── SSEEvent.java
-├── entity/                 # 实体类
-│   └── AgentProfile.java
-├── mapper/                 # MyBatis Mapper
-│   └── AgentProfileMapper.java
-├── session/                # 会话管理
-│   └── SessionManager.java
-├── service/                # 业务服务
-│   └── ToolCallAuditService.java
-└── tool/                   # 工具系统
-    ├── ToolRegistry.java
-    ├── ToolExecutor.java
-    ├── Guardrail.java
-    ├── BuiltinTools.java
-    └── ToolDefinition.java
+common/      枚举（安全级别/审批选项/SSE事件）与 BaseEntity
+dto/         工具请求/响应信封、SSE事件
+config/      MyBatis-Plus、SQLite自动建表与增量迁移、元对象填充
+persona/     身份包组装（SOUL/AGENTS/MEMORY/USER）、记忆与用户画像服务
+llm/         LLM Gateway（OpenAI兼容，密钥引用，mock回退）
+runtime/     AgentRuntime（LLM_DRIVEN ReAct + FIXED_FLOW 编排与步骤日志）
+tool/        工具注册表/护栏/执行器/内置工具
+session/     会话与历史
+command/     斜杠指令路由
+review/      凭据/Git仓库/评审任务编排/报告回传
+api/         Chat/Agent/Skill/Persona/Review 控制器
 ```
-
-## 核心设计
-
-### 工具安全等级
-
-| 等级 | 说明 | 示例 |
-|------|------|------|
-| READ | 只读操作，权限通过后执行 | log.search, alert.query |
-| CONTROLLED | 需二次确认或特定权限 | report.generate, notification.send |
-| WRITE | 必须人工审批 | alert.acknowledge, alert.resolve |
-| FORBIDDEN | 根本不提供 | 修改生产配置、任意SQL |
-
-### 审批机制
-
-WRITE级工具触发审批流程，提供四个选项：
-- **允许一次**：仅本次调用
-- **允许本会话**：当前会话内所有匹配调用
-- **始终允许**：写入白名单，跨会话持久
-- **拒绝**：取消本次调用
-
-超时无人应答时**按拒绝处理**（fail-closed）。
-
-### 斜杠指令
-
-三类来源：
-1. **内置指令**：/new, /stop, /help, /agents, /model, /skills, /commands, /context
-2. **技能指令**：安装skill后自动生成`/<name>`指令
-3. **捆绑包指令**：多个技能打包成一条指令
-
-内置指令优先于技能指令，不可被覆盖。
-
-## 数据库
-
-### 开发环境（SQLite）
-
-自动创建数据库文件：`./data/hermes_agent.db`
-
-### 生产环境（MySQL）
-
-手动执行建表脚本：`src/main/resources/db/schema.sql`
-
-修改`application.yml`中的数据库连接配置。
-
-## API文档
-
-详见[接口契约文档](../interface-contract.md)
-
-### 主要接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | /api/chat | 发送消息（SSE流式） |
-| GET | /api/sessions | 会话列表 |
-| GET | /api/sessions/{id}/messages | 历史消息 |
-| POST | /api/sessions/{id}/interrupt | 停止生成 |
-| POST | /api/sessions/{id}/feedback | 反馈 |
-
-## 待办事项
-
-- [ ] 实现LLM Gateway（对接真实模型）
-- [ ] 实现Planner（执行计划生成）
-- [ ] 实现Intent Router（意图识别）
-- [ ] 完善Guardrail参数Schema校验
-- [ ] 实现审批流程完整逻辑
-- [ ] 实现Skill Registry（技能系统）
-- [ ] 实现Channel Gateway（渠道长连接）
-- [ ] 工具调用持久化到数据库
-- [ ] 对接Java平台真实接口
-
-## 许可证
-
-内部项目，仅供团队使用。
