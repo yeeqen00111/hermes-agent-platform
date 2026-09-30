@@ -8,10 +8,12 @@ import com.hermes.agent.entity.CrReviewParticipant;
 import com.hermes.agent.entity.CrReviewRule;
 import com.hermes.agent.entity.CrReviewTask;
 import com.hermes.agent.mapper.CrRepositoryMapper;
+import com.hermes.agent.mapper.CrReviewIssueMapper;
 import com.hermes.agent.mapper.CrReviewRuleMapper;
 import com.hermes.agent.review.CredentialService;
 import com.hermes.agent.review.GitService;
 import com.hermes.agent.review.ReviewParticipantService;
+import com.hermes.agent.review.ReviewPermissionService;
 import com.hermes.agent.review.ReviewReportService;
 import com.hermes.agent.review.ReviewTaskService;
 import lombok.Data;
@@ -34,8 +36,10 @@ public class ReviewController {
     private final ReviewTaskService reviewTaskService;
     private final ReviewReportService reportService;
     private final ReviewParticipantService participantService;
+    private final ReviewPermissionService permissionService;
     private final CrRepositoryMapper repositoryMapper;
     private final CrReviewRuleMapper ruleMapper;
+    private final CrReviewIssueMapper issueMapper;
 
     // ---------- 凭据管理 ----------
 
@@ -98,9 +102,10 @@ public class ReviewController {
     @PostMapping("/tasks")
     public CrReviewTask trigger(@RequestBody TriggerRequest request,
                                 @RequestHeader(value = "X-Actor-User-Id", required = false) Long userId) {
+        permissionService.requireRole(request.getRuleId(), userId, "INITIATOR");
         CrReviewTask task = reviewTaskService.createTask(request.getRepoId(), request.getBranch(),
                 request.getStartRevision(), "MANUAL",
-                userId == null ? "anonymous" : String.valueOf(userId), null);
+                userId == null ? "anonymous" : String.valueOf(userId), request.getRuleId());
         reviewTaskService.dispatchAsync(task.getTaskUuid());
         return task;
     }
@@ -124,11 +129,16 @@ public class ReviewController {
     @PostMapping("/tasks/{uuid}/re-review")
     public CrReviewTask reReview(@PathVariable String uuid,
                                  @RequestHeader(value = "X-Actor-User-Id", required = false) Long userId) {
+        CrReviewTask task = reportService.byUuid(uuid);
+        permissionService.requireTaskRole(task, userId, "INITIATOR");
         return reviewTaskService.startReReview(uuid, userId == null ? "anonymous" : String.valueOf(userId));
     }
 
     @PostMapping("/tasks/{uuid}/close")
-    public CrReviewTask close(@PathVariable String uuid) {
+    public CrReviewTask close(@PathVariable String uuid,
+                              @RequestHeader(value = "X-Actor-User-Id", required = false) Long userId) {
+        CrReviewTask task = reportService.byUuid(uuid);
+        permissionService.requireTaskRole(task, userId, "CLOSER");
         return reviewTaskService.close(uuid);
     }
 
@@ -159,7 +169,14 @@ public class ReviewController {
     // ---------- 评审问题闭环 ----------
 
     @PostMapping("/issues/{id}/status")
-    public Map<String, Object> updateIssueStatus(@PathVariable Long id, @RequestBody IssueStatusRequest request) {
+    public Map<String, Object> updateIssueStatus(@PathVariable Long id, @RequestBody IssueStatusRequest request,
+                                                 @RequestHeader(value = "X-Actor-User-Id", required = false) Long userId) {
+        CrReviewIssue existing = issueMapper.selectById(id);
+        if (existing == null) {
+            return Map.of("success", false, "message", "问题不存在");
+        }
+        CrReviewTask task = reportService.byUuid(existing.getTaskUuid());
+        permissionService.requireTaskRole(task, userId, "CLOSER");
         CrReviewIssue issue = new CrReviewIssue();
         issue.setId(id);
         issue.setStatus(request.getStatus());
@@ -202,6 +219,7 @@ public class ReviewController {
         private Long repoId;
         private String branch;
         private String startRevision;
+        private Long ruleId;
     }
 
     @Data

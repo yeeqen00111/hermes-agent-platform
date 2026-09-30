@@ -9,6 +9,7 @@ import com.hermes.agent.dto.ToolRequest;
 import com.hermes.agent.dto.ToolResponse;
 import com.hermes.agent.entity.ApprovalRequest;
 import com.hermes.agent.entity.ToolCall;
+import com.hermes.agent.notify.NotificationGateway;
 import com.hermes.agent.service.ToolCallAuditService;
 import com.hermes.agent.skill.SkillRegistry;
 import lombok.Data;
@@ -34,6 +35,7 @@ public class ToolExecutor {
     private final ApprovalService approvalService;
     private final ToolCallAuditService auditService;
     private final SkillRegistry skillRegistry;
+    private final NotificationGateway notificationGateway;
     private final ObjectMapper objectMapper;
 
     /**
@@ -91,11 +93,43 @@ public class ToolExecutor {
             }
         }
 
-        // 4. skill.load 真实执行（读技能正文），其余工具开发阶段用Mock
+        // 4. skill.load / notification.send 真实执行，其余工具开发阶段用Mock
         if ("skill.load".equals(toolCode)) {
             return executeSkillLoad(request, startTime);
         }
+        if ("notification.send".equals(toolCode)) {
+            return executeNotificationSend(request, startTime);
+        }
         return mockExecute(toolCode, request, startTime);
+    }
+
+    private ToolResponse executeNotificationSend(ToolRequest request, long startTime) {
+        Map<String, Object> args = request.getArguments() == null ? Map.of() : request.getArguments();
+        String channelType = str(args, "channelType");
+        String recipient = str(args, "recipient");
+        if (channelType == null || channelType.isBlank()) {
+            return errorResponse("notification.send", "INVALID_ARGUMENT", "缺少参数 channelType（FEISHU/EMAIL）", startTime);
+        }
+        String title = str(args, "title");
+        String content = str(args, "content");
+        try {
+            notificationGateway.sendByType(channelType.toUpperCase(),
+                    recipient == null ? "" : recipient,
+                    title == null ? "" : title,
+                    content == null ? "" : content);
+        } catch (Exception e) {
+            return errorResponse("notification.send", "EXECUTION_ERROR", e.getMessage(), startTime);
+        }
+        ToolResponse response = new ToolResponse();
+        response.setSuccess(true);
+        response.setData(Map.of("channelType", channelType.toUpperCase(), "recipient", recipient == null ? "" : recipient));
+        response.setDurationMs(System.currentTimeMillis() - startTime);
+        return response;
+    }
+
+    private String str(Map<String, Object> args, String key) {
+        Object v = args.get(key);
+        return v == null ? null : String.valueOf(v);
     }
 
     private ToolResponse executeSkillLoad(ToolRequest request, long startTime) {

@@ -591,3 +591,102 @@ INSERT OR IGNORE INTO ai_agent_context_file (file_type, content, scope, agent_co
 评审约定：遵循仓库review_prompt_extra中的仓库级规范；评分0-100；每个问题标注severity(BLOCKER/CRITICAL/MAJOR/MINOR)与category。', 'AGENT', 'code-reviewer'),
 ('SOUL', '# SOUL
 你是报表分析员，按固定流程执行：聚合→摘要。不做流程外推理。', 'AGENT', 'report-analyst');
+
+-- ============================================
+-- 三期 平台管理面：项目 / 用户（人员）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sys_project (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(128) NOT NULL,
+    description VARCHAR(500),
+    parent_id BIGINT,
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sys_user (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(64) NOT NULL,
+    email VARCHAR(128),
+    feishu VARCHAR(128),
+    phone VARCHAR(32),
+    role_codes VARCHAR(256),
+    is_admin TINYINT DEFAULT 0,
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- 三期 ◆ 复用控制塔六项：库连接 / 告警通道 / 告警模板（平台侧集成位+本地回退）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_db_connection (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    db_type VARCHAR(32) NOT NULL DEFAULT 'MYSQL',
+    host VARCHAR(256) NOT NULL,
+    port INT NOT NULL,
+    database_name VARCHAR(128),
+    username VARCHAR(128),
+    password VARCHAR(256),
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_notify_channel (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    channel_type VARCHAR(32) NOT NULL,
+    config TEXT,
+    enabled TINYINT DEFAULT 1,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_notify_template (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    channel_type VARCHAR(32),
+    title_template VARCHAR(256),
+    content_template TEXT,
+    enabled TINYINT DEFAULT 1,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_notify_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_code VARCHAR(64),
+    channel_type VARCHAR(32),
+    recipient VARCHAR(256),
+    title VARCHAR(256),
+    content TEXT,
+    status VARCHAR(32) NOT NULL,
+    error VARCHAR(500),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notify_log_time ON ai_notify_log(create_time);

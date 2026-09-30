@@ -567,3 +567,105 @@ INSERT IGNORE INTO ai_agent_context_file (file_type, content, scope, agent_code)
 ('SOUL', '# SOUL\n你是一名资深代码评审专家。\n使命：对指定仓库分支区间内的提交进行评审，输出markdown报告与多维评分（健壮性/BUG/安全/可维护性/性能）。\n边界：只读代码；不修改仓库；问题必须给出文件与行号证据。\n流程：获取git提交信息→执行代码审查（系统提示词+仓库提示词）→报告回传。', 'AGENT', 'code-reviewer'),
 ('AGENTS', '# AGENTS\n评审约定：遵循仓库review_prompt_extra中的仓库级规范；评分0-100；每个问题标注severity(BLOCKER/CRITICAL/MAJOR/MINOR)与category。', 'AGENT', 'code-reviewer'),
 ('SOUL', '# SOUL\n你是报表分析员，按固定流程执行：聚合→摘要。不做流程外推理。', 'AGENT', 'report-analyst');
+
+-- ============================================
+-- 三期 平台管理面：项目 / 用户（人员）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sys_project (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    name VARCHAR(128) NOT NULL COMMENT '项目名称',
+    description VARCHAR(500) COMMENT '项目描述',
+    parent_id BIGINT COMMENT '所属项目',
+    status VARCHAR(32) DEFAULT 'ACTIVE' COMMENT '状态',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) ENGINE=InnoDB COMMENT='项目管理';
+
+CREATE TABLE IF NOT EXISTS sys_user (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    user_code VARCHAR(64) NOT NULL COMMENT '用户编码（对接控制塔/PDDS身份）',
+    name VARCHAR(64) NOT NULL COMMENT '姓名',
+    email VARCHAR(128) COMMENT '邮箱',
+    feishu VARCHAR(128) COMMENT '飞书账号',
+    phone VARCHAR(32) COMMENT '手机号',
+    role_codes VARCHAR(256) COMMENT '角色编码列表（本地回退位，权威在控制塔）',
+    is_admin TINYINT DEFAULT 0 COMMENT '是否管理员',
+    status VARCHAR(32) DEFAULT 'ACTIVE' COMMENT '状态',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_user_code (user_code)
+) ENGINE=InnoDB COMMENT='用户/人员管理';
+
+-- ============================================
+-- 三期 ◆ 复用控制塔六项：库连接 / 告警通道 / 告警模板（平台侧集成位+本地回退）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_db_connection (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '连接编码',
+    name VARCHAR(128) NOT NULL COMMENT '连接名称',
+    db_type VARCHAR(32) NOT NULL DEFAULT 'MYSQL' COMMENT '类型 MYSQL/OCEANBASE/SQLITE',
+    host VARCHAR(256) NOT NULL COMMENT '主机',
+    port INT NOT NULL COMMENT '端口',
+    database_name VARCHAR(128) COMMENT '库名',
+    username VARCHAR(128) COMMENT '用户名',
+    password VARCHAR(256) COMMENT '密码',
+    status VARCHAR(32) DEFAULT 'ACTIVE' COMMENT '状态',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_db_conn_code (code)
+) ENGINE=InnoDB COMMENT='数据库连接信息（◆复用控制塔，平台侧集成位）';
+
+CREATE TABLE IF NOT EXISTS ai_notify_channel (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '通道编码',
+    name VARCHAR(128) NOT NULL COMMENT '通道名称',
+    channel_type VARCHAR(32) NOT NULL COMMENT '类型 FEISHU/EMAIL',
+    config TEXT COMMENT '通道配置JSON（飞书webhook/邮件SMTP）',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_notify_channel_code (code)
+) ENGINE=InnoDB COMMENT='告警通道（飞书/邮件，◆复用控制塔，平台侧集成位）';
+
+CREATE TABLE IF NOT EXISTS ai_notify_template (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '模板编码',
+    name VARCHAR(128) NOT NULL COMMENT '模板名称',
+    channel_type VARCHAR(32) COMMENT '适用通道类型',
+    title_template VARCHAR(256) COMMENT '标题模板',
+    content_template TEXT COMMENT '内容模板',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_notify_tpl_code (code)
+) ENGINE=InnoDB COMMENT='告警/通知模板（◆复用控制塔，平台侧集成位）';
+
+CREATE TABLE IF NOT EXISTS ai_notify_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    channel_code VARCHAR(64) COMMENT '通道编码',
+    channel_type VARCHAR(32) COMMENT '通道类型',
+    recipient VARCHAR(256) COMMENT '接收人（邮箱/飞书）',
+    title VARCHAR(256) COMMENT '标题',
+    content TEXT COMMENT '内容',
+    status VARCHAR(32) NOT NULL COMMENT 'SUCCESS/FAILED/NO_CHANNEL',
+    error VARCHAR(500) COMMENT '错误信息',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '发送时间',
+    INDEX idx_notify_log_time (create_time)
+) ENGINE=InnoDB COMMENT='通知发送日志（只写）';

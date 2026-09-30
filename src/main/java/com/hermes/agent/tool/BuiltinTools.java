@@ -103,7 +103,7 @@ public class BuiltinTools {
             case "skill.load" -> "按技能编码加载技能的SKILL.md全文（可用技能见系统提示索引）";
             case "database.metric.query" -> "查询业务指标数据";
             case "report.generate" -> "生成系统健康报表";
-            case "notification.send" -> "发送通知消息";
+            case "notification.send" -> "发送通知（需人工审批）：channelType=FEISHU/EMAIL，recipient 接收人（邮箱/飞书），title 标题，content 内容；走平台通知网关（◆ 复用控制塔告警通道）";
             default -> "未知工具";
         };
     }
