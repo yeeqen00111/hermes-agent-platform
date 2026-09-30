@@ -54,7 +54,14 @@ public class DatabaseInitializer implements ApplicationRunner {
                 "ALTER TABLE ai_agent_profile ADD COLUMN execution_mode VARCHAR(32) DEFAULT 'LLM_DRIVEN'",
                 "ALTER TABLE ai_agent_profile ADD COLUMN flow_definition TEXT",
                 "ALTER TABLE ai_agent_profile ADD COLUMN trigger_type VARCHAR(32) DEFAULT 'CHAT'",
-                "ALTER TABLE ai_agent_context_file ADD COLUMN agent_code VARCHAR(64)"
+                "ALTER TABLE ai_agent_context_file ADD COLUMN agent_code VARCHAR(64)",
+                "ALTER TABLE ai_mcp_server ADD COLUMN create_by VARCHAR(64)",
+                "ALTER TABLE ai_mcp_server ADD COLUMN update_by VARCHAR(64)",
+                "ALTER TABLE ai_mcp_tool ADD COLUMN del_flag TINYINT DEFAULT 0",
+                "ALTER TABLE ai_mcp_tool ADD COLUMN create_by VARCHAR(64)",
+                "ALTER TABLE ai_mcp_tool ADD COLUMN update_by VARCHAR(64)",
+                "ALTER TABLE ai_channel ADD COLUMN create_by VARCHAR(64)",
+                "ALTER TABLE ai_channel ADD COLUMN update_by VARCHAR(64)"
         };
         for (String sql : migrations) {
             try (var stmt = connection.createStatement()) {

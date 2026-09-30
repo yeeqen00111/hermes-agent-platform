@@ -9,6 +9,7 @@ import com.hermes.agent.dto.ToolRequest;
 import com.hermes.agent.dto.ToolResponse;
 import com.hermes.agent.entity.ApprovalRequest;
 import com.hermes.agent.entity.ToolCall;
+import com.hermes.agent.mcp.McpService;
 import com.hermes.agent.notify.NotificationGateway;
 import com.hermes.agent.service.ToolCallAuditService;
 import com.hermes.agent.skill.SkillRegistry;
@@ -37,6 +38,7 @@ public class ToolExecutor {
     private final SkillRegistry skillRegistry;
     private final NotificationGateway notificationGateway;
     private final MigrationToolAdapter migrationToolAdapter;
+    private final McpService mcpService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -100,6 +102,9 @@ public class ToolExecutor {
         }
         if ("notification.send".equals(toolCode)) {
             return executeNotificationSend(request, startTime);
+        }
+        if (toolCode.startsWith("mcp.")) {
+            return mcpService.callTool(toolCode, request, startTime);
         }
         return migrationToolAdapter.execute(toolCode, request, startTime);
     }

@@ -5,9 +5,9 @@ spring:
   application:
     name: hermes-runtime
   datasource:
-    # 开发环境使用SQLite，生产环境切换到MySQL
-    url: jdbc:sqlite:./data/hermes_agent.db
-    driver-class-name: org.sqlite.JDBC
+    # 开发环境使用SQLite，生产环境通过环境变量切换到MySQL（compose 见仓库根 docker-compose.yml）
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlite:./data/hermes_agent.db}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.sqlite.JDBC}
     hikari:
       maximum-pool-size: 5
       minimum-idle: 1
@@ -44,11 +44,18 @@ hermes:
       # Java 平台数据面地址（四期迁移对接位，契约见 migration-assessment.md §6，待 Java 团队确认）
       base-url: ${MIGRATION_DATA_PLANE_BASE_URL:}
   channel:
+    # 入站事件令牌（契约 §6.2 方向A；未配置时开发放行并告警）
+    inbound-token: ${HERMES_CHANNEL_INBOUND_TOKEN:}
     # 渠道适配器配置
     feishu:
       enabled: false
       app-id: ${FEISHU_APP_ID:}
       app-secret: ${FEISHU_APP_SECRET:}
+      # 出站 API 基址（冒烟测试可指向本地 mock）
+      base-url: ${HERMES_FEISHU_BASE_URL:https://open.feishu.cn}
+  sso:
+    # PDDS 对接位令牌（契约 §6.2 方向A；未配置时开发放行并告警）
+    token: ${HERMES_SSO_TOKEN:}
 
 logging:
   level:

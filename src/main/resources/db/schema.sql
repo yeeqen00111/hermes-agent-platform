@@ -140,7 +140,9 @@ CREATE TABLE ai_mcp_server (
     enabled TINYINT DEFAULT 1 COMMENT '是否启用',
     config JSON COMMENT '额外配置',
     del_flag TINYINT DEFAULT 0 COMMENT '删除标记',
+    create_by VARCHAR(64) COMMENT '创建人',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_server_code (server_code)
 ) ENGINE=InnoDB COMMENT='MCP服务器配置表';
@@ -154,7 +156,10 @@ CREATE TABLE ai_mcp_tool (
     param_schema JSON COMMENT '参数Schema',
     safety_level VARCHAR(32) DEFAULT 'READ' COMMENT '安全等级',
     enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    del_flag TINYINT DEFAULT 0 COMMENT '删除标记',
+    create_by VARCHAR(64) COMMENT '创建人',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_tool_code (tool_code),
     INDEX idx_server_code (server_code)
@@ -178,7 +183,9 @@ CREATE TABLE ai_channel (
     owner_instance VARCHAR(64) COMMENT '持有连接的实例ID',
     heartbeat_time DATETIME COMMENT '最后心跳时间',
     del_flag TINYINT DEFAULT 0 COMMENT '删除标记',
+    create_by VARCHAR(64) COMMENT '创建人',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_channel_code (channel_code)
 ) ENGINE=InnoDB COMMENT='渠道配置表';

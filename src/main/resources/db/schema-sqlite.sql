@@ -129,7 +129,9 @@ CREATE TABLE IF NOT EXISTS ai_mcp_server (
     enabled TINYINT DEFAULT 1,
     config TEXT,
     del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -144,7 +146,10 @@ CREATE TABLE IF NOT EXISTS ai_mcp_tool (
     param_schema TEXT,
     safety_level VARCHAR(32) DEFAULT 'READ',
     enabled TINYINT DEFAULT 1,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -165,7 +170,9 @@ CREATE TABLE IF NOT EXISTS ai_channel (
     owner_instance VARCHAR(64),
     heartbeat_time DATETIME,
     del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

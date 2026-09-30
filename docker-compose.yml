@@ -1,0 +1,41 @@
+# HERMES 智能体平台部署编排（白板 r3c0：单租户多实例，除数据库外无外部组件）
+# 应用无状态（配置全在 MySQL），多实例用 docker compose up --scale hermes-runtime=N 水平扩展。
+# 渠道适配器单元（有状态长连接）不在此编排内，独立部署（agent-platform §9.1/§2.3）。
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-hermes-root-dev}
+      MYSQL_DATABASE: hermes
+      MYSQL_USER: hermes
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-hermes-dev}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 首次启动自动执行 MySQL schema（含 persona 种子数据）
+      - ./src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uhermes", "-p${MYSQL_PASSWORD:-hermes-dev}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  hermes-runtime:
+    build: .
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hermes?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_DRIVER: com.mysql.cj.jdbc.Driver
+      # 生产必须覆盖以下占位令牌/密钥引用（§6.2 令牌与轮换）
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-in-production}
+      HERMES_CHANNEL_INBOUND_TOKEN: ${HERMES_CHANNEL_INBOUND_TOKEN:-}
+      HERMES_SSO_TOKEN: ${HERMES_SSO_TOKEN:-}
+      MIGRATION_DATA_PLANE_BASE_URL: ${MIGRATION_DATA_PLANE_BASE_URL:-}
+      # LLM 网关与模型引用（按实际部署注入）
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-gpt-4}
+
+volumes:
+  mysql-data:
