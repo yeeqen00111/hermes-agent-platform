@@ -56,6 +56,23 @@ hermes:
   sso:
     # PDDS 对接位令牌（契约 §6.2 方向A；未配置时开发放行并告警）
     token: ${HERMES_SSO_TOKEN:}
+  monitor:
+    # 流程监控（白板：看板监控/状态告警/时间告警/时间先后/半天报表-AI）
+    enabled: true
+    # 告警扫描间隔(ms)
+    scan-fixed-delay-ms: 60000
+    # 时间告警：单步耗时阈值(ms)
+    slow-step-ms: 300000
+    # 时间告警：RUNNING 卡死阈值(ms)
+    stuck-step-ms: 600000
+    # 告警与报表发送通道/接收人（空则只落日志）
+    alert-channel-type: FEISHU
+    alert-recipient: ${HERMES_MONITOR_RECIPIENT:}
+    # 半天报表：cron 与窗口
+    report-cron: "0 0 9,15 * * *"
+    report-window-hours: 12
+    report-model-provider: ${HERMES_MONITOR_REPORT_PROVIDER:deepseek}
+    report-model-name: ${HERMES_MONITOR_REPORT_MODEL:deepseek-chat}
 
 logging:
   level:
