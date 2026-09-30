@@ -495,6 +495,24 @@ CREATE TABLE IF NOT EXISTS cr_review_issue (
 
 CREATE INDEX IF NOT EXISTS idx_review_issue_task ON cr_review_issue(task_uuid);
 
+-- 评审规则参与人表（三角色 + 联系方式，白板「哪些人可以发起/接收报告/执行闭环」）
+CREATE TABLE IF NOT EXISTS cr_review_participant (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    role VARCHAR(32) NOT NULL,
+    email VARCHAR(128),
+    feishu VARCHAR(128),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_participant_rule ON cr_review_participant(rule_id);
+CREATE INDEX IF NOT EXISTS idx_review_participant_user ON cr_review_participant(user_id);
+
 -- ============================================
 -- 审批门：WRITE/CONTROLLED 工具的人工确认（契约 §3.3）
 -- ============================================

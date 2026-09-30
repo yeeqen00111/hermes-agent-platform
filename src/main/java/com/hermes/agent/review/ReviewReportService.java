@@ -32,6 +32,8 @@ public class ReviewReportService {
     private final CrReviewTaskMapper taskMapper;
     private final CrReviewReportMapper reportMapper;
     private final CrReviewIssueMapper issueMapper;
+    private final ReviewParticipantService participantService;
+    private final ReviewNotificationService notificationService;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -75,6 +77,7 @@ public class ReviewReportService {
         task.setFinishTime(LocalDateTime.now());
         task.setErrorMessage(null);
         taskMapper.updateById(task);
+        notificationService.notifyReportReady(task, round);
         log.info("评审报告已回传: task={}, round={}", taskUuid, round);
         return report;
     }
@@ -92,6 +95,7 @@ public class ReviewReportService {
         task.setErrorMessage(errorMessage);
         task.setFinishTime(LocalDateTime.now());
         taskMapper.updateById(task);
+        notificationService.notifyFailed(task, errorMessage);
         log.warn("评审任务失败回调: task={}, error={}", taskUuid, errorMessage);
     }
 
@@ -117,6 +121,29 @@ public class ReviewReportService {
         return issueMapper.selectList(new LambdaQueryWrapper<CrReviewIssue>()
                 .eq(CrReviewIssue::getTaskUuid, taskUuid)
                 .orderByAsc(CrReviewIssue::getId));
+    }
+
+    /**
+     * 「查看自己的问题记录」：用户参与过的评审规则下所有任务的问题
+     */
+    public List<CrReviewIssue> issuesByUser(Long userId, String status) {
+        if (userId == null) {
+            return List.of();
+        }
+        List<Long> ruleIds = participantService.ruleIdsOfUser(userId);
+        if (ruleIds.isEmpty()) {
+            return List.of();
+        }
+        List<CrReviewTask> tasks = taskMapper.selectList(new LambdaQueryWrapper<CrReviewTask>()
+                .in(CrReviewTask::getRuleId, ruleIds));
+        if (tasks.isEmpty()) {
+            return List.of();
+        }
+        List<String> taskUuids = tasks.stream().map(CrReviewTask::getTaskUuid).toList();
+        return issueMapper.selectList(new LambdaQueryWrapper<CrReviewIssue>()
+                .in(CrReviewIssue::getTaskUuid, taskUuids)
+                .eq(status != null && !status.isBlank(), CrReviewIssue::getStatus, status)
+                .orderByDesc(CrReviewIssue::getId));
     }
 
     public void updateIssue(CrReviewIssue issue) {

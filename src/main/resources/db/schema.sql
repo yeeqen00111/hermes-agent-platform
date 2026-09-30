@@ -474,6 +474,23 @@ CREATE TABLE cr_review_issue (
     INDEX idx_issue_task (task_uuid)
 ) ENGINE=InnoDB COMMENT='评审问题表';
 
+-- 评审规则参与人表（三角色 + 联系方式，白板「哪些人可以发起/接收报告/执行闭环」）
+CREATE TABLE cr_review_participant (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    rule_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    role VARCHAR(32) NOT NULL COMMENT 'INITIATOR/RECIPIENT/CLOSER',
+    email VARCHAR(128),
+    feishu VARCHAR(128),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_participant_rule (rule_id),
+    INDEX idx_participant_user (user_id)
+) ENGINE=InnoDB COMMENT='评审规则参与人表';
+
 -- ============================================
 -- 审批门：WRITE/CONTROLLED 工具的人工确认（契约 §3.3）
 -- ============================================

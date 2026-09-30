@@ -4,12 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hermes.agent.entity.CrCredential;
 import com.hermes.agent.entity.CrRepository;
 import com.hermes.agent.entity.CrReviewIssue;
+import com.hermes.agent.entity.CrReviewParticipant;
 import com.hermes.agent.entity.CrReviewRule;
 import com.hermes.agent.entity.CrReviewTask;
 import com.hermes.agent.mapper.CrRepositoryMapper;
 import com.hermes.agent.mapper.CrReviewRuleMapper;
 import com.hermes.agent.review.CredentialService;
 import com.hermes.agent.review.GitService;
+import com.hermes.agent.review.ReviewParticipantService;
 import com.hermes.agent.review.ReviewReportService;
 import com.hermes.agent.review.ReviewTaskService;
 import lombok.Data;
@@ -31,6 +33,7 @@ public class ReviewController {
     private final GitService gitService;
     private final ReviewTaskService reviewTaskService;
     private final ReviewReportService reportService;
+    private final ReviewParticipantService participantService;
     private final CrRepositoryMapper repositoryMapper;
     private final CrReviewRuleMapper ruleMapper;
 
@@ -153,7 +156,7 @@ public class ReviewController {
         return Map.of("success", true, "tasks", tasks);
     }
 
-    // ---------- 问题闭环 ----------
+    // ---------- 评审问题闭环 ----------
 
     @PostMapping("/issues/{id}/status")
     public Map<String, Object> updateIssueStatus(@PathVariable Long id, @RequestBody IssueStatusRequest request) {
@@ -162,6 +165,35 @@ public class ReviewController {
         issue.setStatus(request.getStatus());
         issue.setRecheckNote(request.getNote());
         reportService.updateIssue(issue);
+        return Map.of("success", true);
+    }
+
+    /**
+     * 「查看自己的问题记录」：用户参与过的评审规则下所有任务的问题
+     */
+    @GetMapping("/issues")
+    public List<CrReviewIssue> issuesByUser(@RequestParam Long userId,
+                                            @RequestParam(required = false) String status) {
+        return reportService.issuesByUser(userId, status);
+    }
+
+    // ---------- 规则参与人（三角色 + 邮箱/飞书） ----------
+
+    @GetMapping("/rules/{ruleId}/participants")
+    public List<CrReviewParticipant> listParticipants(@PathVariable Long ruleId) {
+        return participantService.list(ruleId);
+    }
+
+    @PostMapping("/rules/{ruleId}/participants")
+    public CrReviewParticipant saveParticipant(@PathVariable Long ruleId,
+                                               @RequestBody CrReviewParticipant participant) {
+        participant.setRuleId(ruleId);
+        return participantService.save(participant);
+    }
+
+    @DeleteMapping("/participants/{id}")
+    public Map<String, Object> deleteParticipant(@PathVariable Long id) {
+        participantService.delete(id);
         return Map.of("success", true);
     }
 
