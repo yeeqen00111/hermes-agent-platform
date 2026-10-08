@@ -109,7 +109,7 @@ public class BuiltinTools {
     }
 
     /**
-     * 参数Schema（对齐 interface-contract §4.3 逐工具入参；Guardrail 深度校验暂为 TODO）
+     * 参数Schema（对齐 interface-contract §4.3 逐工具入参；由 Guardrail.validateParamSchema 强制执行必填与数值类型）
      */
     private Map<String, Object> buildParamSchema(String toolCode) {
         Map<String, Object> properties = new LinkedHashMap<>();
