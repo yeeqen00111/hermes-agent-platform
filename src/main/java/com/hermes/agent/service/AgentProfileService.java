@@ -30,6 +30,13 @@ public class AgentProfileService {
     }
 
     /**
+     * 根据主键查询Agent
+     */
+    public Optional<AgentProfile> getById(Long id) {
+        return Optional.ofNullable(agentProfileMapper.selectById(id));
+    }
+
+    /**
      * 列出所有启用的Agent
      */
     public List<AgentProfile> listEnabled() {
@@ -48,20 +55,6 @@ public class AgentProfileService {
         } else {
             agentProfileMapper.updateById(profile);
             log.info("更新Agent: {}", profile.getAgentCode());
-        }
-    }
-
-    /**
-     * 发布Agent（创建版本快照）
-     */
-    public void publish(Long id) {
-        AgentProfile profile = agentProfileMapper.selectById(id);
-        if (profile != null) {
-            profile.setStatus("PUBLISHED");
-            profile.setCurrentVersion(profile.getCurrentVersion() + 1);
-            agentProfileMapper.updateById(profile);
-            log.info("发布Agent: {}, 版本: {}", profile.getAgentCode(), profile.getCurrentVersion());
-            // TODO: 创建版本快照到ai_agent_version表
         }
     }
 }
