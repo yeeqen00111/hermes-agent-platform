@@ -8,7 +8,6 @@ const group = computed(() => String(route.meta.group ?? ''))
 
 /** 占位屏的真实原因——如实标注，不糊弄（判据=后端有没有端点/权威在哪） */
 const HINTS: Record<string, string> = {
-  '/admin/system/log-collect': '本平台实现中：日志采集（采集通道 kafka/消息队列/兼容 filebeat-json + 日志 JSON 解析规则），按白板「系统管理」在本平台建设。',
   '/admin/system/nacos': '本平台实现中：nacos 服务器（配置凭据 / 配置分类 / 服务分类），按白板「系统管理」在本平台建设。',
   '/admin/org/users': '角色 / 菜单权威在控制塔（白板 ◆复用控制塔六项），本平台复用、不重造；人员主数据见「人员管理」。',
   '/admin/org/tenant': '租户实体与权限权威在控制塔，本平台复用；等 Java 侧提供租户接口后接入。',

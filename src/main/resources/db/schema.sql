@@ -690,3 +690,47 @@ CREATE TABLE IF NOT EXISTS ai_notify_log (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '发送时间',
     INDEX idx_notify_log_time (create_time)
 ) ENGINE=InnoDB COMMENT='通知发送日志（只写）';
+
+-- ============================================
+-- 系统管理 · 日志采集（图2 日志中枢：filebeat→kafka→日志采集→日志解析）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_log_channel (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '通道编码',
+    name VARCHAR(128) NOT NULL COMMENT '通道名称',
+    channel_type VARCHAR(32) NOT NULL COMMENT 'KAFKA/MQ/FILEBEAT_JSON',
+    config TEXT COMMENT 'JSON：KAFKA={brokers,topic,groupId,securityProtocol}；MQ={topic}；FILEBEAT_JSON={path}',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_log_channel_code (code)
+) ENGINE=InnoDB COMMENT='日志采集通道（目前只支持 kafka，兼容 filebeat.log）';
+
+CREATE TABLE IF NOT EXISTS ai_log_parse_rule (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '规则编码',
+    name VARCHAR(128) NOT NULL COMMENT '规则名称',
+    channel_code VARCHAR(64) COMMENT '关联采集通道编码',
+    system_field VARCHAR(128) COMMENT '系统级别解析-系统字段映射',
+    time_field VARCHAR(128) COMMENT '时间级别解析-时间字段',
+    time_format VARCHAR(64) COMMENT '时间级别解析-时间格式',
+    level_field VARCHAR(128) COMMENT '日志级别解析-级别字段',
+    level_mapping TEXT COMMENT '日志级别映射 JSON',
+    content_field VARCHAR(128) COMMENT '内容级别解析-内容字段',
+    service_field VARCHAR(128) COMMENT '服务级别解析-服务字段映射',
+    sample_json TEXT COMMENT '示例日志 JSON',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_log_parse_code (code),
+    INDEX idx_log_parse_channel (channel_code)
+) ENGINE=InnoDB COMMENT='日志JSON解析规则（系统/时间/级别/内容/服务 五级）';

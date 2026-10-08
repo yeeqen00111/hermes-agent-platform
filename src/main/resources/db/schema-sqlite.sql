@@ -713,3 +713,46 @@ CREATE TABLE IF NOT EXISTS ai_notify_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_notify_log_time ON ai_notify_log(create_time);
+
+-- ============================================
+-- 系统管理 · 日志采集（图2 日志中枢：filebeat→kafka→日志采集→日志解析）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_log_channel (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    channel_type VARCHAR(32) NOT NULL,
+    config TEXT,
+    enabled TINYINT DEFAULT 1,
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_log_parse_rule (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    channel_code VARCHAR(64),
+    system_field VARCHAR(128),
+    time_field VARCHAR(128),
+    time_format VARCHAR(64),
+    level_field VARCHAR(128),
+    level_mapping TEXT,
+    content_field VARCHAR(128),
+    service_field VARCHAR(128),
+    sample_json TEXT,
+    enabled TINYINT DEFAULT 1,
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_log_parse_channel ON ai_log_parse_rule(channel_code);
