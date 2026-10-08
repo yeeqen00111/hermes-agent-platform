@@ -16,7 +16,7 @@ const HINTS: Record<string, string> = {
   '/admin/org/iterations': '迭代管理·灰度：后端 🟡 待补（无 Controller）。',
   '/admin/agent/commands': '指令（ai_command_bundle）经对话指令（/model、/bundle）生效，当前无 REST 管理端点。',
   '/admin/agent/models': '模型（ai_model / model_provider）经对话指令（/model）生效，当前无 REST 管理端点。',
-  '/report/half-day': '半天报表-AI：后端已就绪（POST /api/dashboard/half-day-report，cron 09:00/15:00），本屏待接。',
+  '/report/half-day': '半天报表-AI 已接入「看板监控」页（右上「生成半天报表-AI」按钮，POST /api/dashboard/half-day-report）；定时发送由平台 cron 09:00/15:00 负责。',
   '/ops/log-alert-rules': '迁移项：智能运维（日志告警规则 / 告警监控 / 告警发送日志 / 业务指标监控 /【AI】告警报表 / 授权 / 日志清理）——现成系统在岚图，本平台只做适配。',
   '/ops/alert-monitor': '迁移项：告警监控在岚图现成系统，本平台只做适配。',
   '/ops/alert-send-log': '迁移项：告警发送日志在岚图现成系统，本平台只做适配。',

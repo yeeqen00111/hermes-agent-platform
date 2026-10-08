@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import MainLayout from '@/layouts/MainLayout.vue'
 import ChatView from '@/views/ChatView.vue'
 import DashboardView from '@/views/DashboardView.vue'
+import AuditView from '@/views/AuditView.vue'
 import PlaceholderView from '@/views/PlaceholderView.vue'
 import ReviewRulesView from '@/views/review/ReviewRulesView.vue'
 import ReviewTasksView from '@/views/review/ReviewTasksView.vue'
@@ -20,6 +21,7 @@ import { navGroups } from '@/nav'
 const realComponents: Record<string, unknown> = {
   '/chat': ChatView,
   '/dashboard': DashboardView,
+  '/audit/tool-calls': AuditView,
   '/review/rules': ReviewRulesView,
   '/review/tasks': ReviewTasksView,
   '/review/records': ReviewRecordsView,

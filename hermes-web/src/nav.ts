@@ -27,6 +27,7 @@ export const navGroups: NavGroup[] = [
     title: '监控与报表',
     items: [
       { path: '/dashboard', title: '看板监控（状态/时间/时序告警）' },
+      { path: '/audit/tool-calls', title: '工具调用审计（契约 §17.1）' },
       { path: '/report/half-day', title: '半天报表 · AI' },
     ],
   },
