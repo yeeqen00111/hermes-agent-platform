@@ -101,6 +101,31 @@ public class AgentController {
     }
 
     /**
+     * 灰度开关（ADR-009 / agent-platform §8.2）：新会话按 {@code ratio}% 指向 {@code version}；
+     * {@code ratio<=0} 关闭灰度。已建会话不受影响（会话中途不切版本）。
+     */
+    @PostMapping("/agent-profiles/{id}/gray")
+    public Map<String, Object> grayAgent(@PathVariable Long id, @RequestBody GrayRequest request) {
+        return agentProfileService.getById(id)
+                .map(profile -> {
+                    try {
+                        AgentProfile updated = versionService.setGray(profile.getAgentCode(),
+                                request.getVersion(), request.getRatio() == null ? 0 : request.getRatio());
+                        Map<String, Object> data = new LinkedHashMap<>();
+                        data.put("success", true);
+                        data.put("agentCode", updated.getAgentCode());
+                        data.put("currentVersion", updated.getCurrentVersion());
+                        data.put("grayVersion", updated.getGrayVersion());
+                        data.put("grayRatio", updated.getGrayRatio());
+                        return data;
+                    } catch (IllegalArgumentException e) {
+                        return Map.<String, Object>of("success", false, "message", e.getMessage());
+                    }
+                })
+                .orElseGet(() -> Map.of("success", false, "message", "Agent not found"));
+    }
+
+    /**
      * 试跑（契约 §3.5：发布前必须验）——用当前草稿配置跑一轮真实问答。
      * 不建会话、不落聊天历史；无审批通道，WRITE/CONTROLLED 工具一律拒绝（fail-closed）；
      * 工具调用审计照记，channel=dry-run 便于与线上正式对话区分。
@@ -137,5 +162,13 @@ public class AgentController {
     public static class DryRunRequest {
         private String message;
         private Long userId;
+    }
+
+    @Data
+    public static class GrayRequest {
+        /** 目标版本号；ratio<=0 时可空（表示关闭灰度） */
+        private Integer version;
+        /** 灰度比例 0-100 */
+        private Integer ratio;
     }
 }

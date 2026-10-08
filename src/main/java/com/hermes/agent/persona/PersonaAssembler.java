@@ -30,6 +30,7 @@ public class PersonaAssembler {
     private final AgentProfileMapper profileMapper;
     private final AgentContextFileMapper contextFileMapper;
     private final AiChatSessionMapper chatSessionMapper;
+    private final VersionService versionService;
     private final MemoryService memoryService;
     private final UserProfileService userProfileService;
     private final SkillRegistry skillRegistry;
@@ -48,12 +49,19 @@ public class PersonaAssembler {
 
     public PersonaPack assemble(String agentCode, Long userId, String sessionId) {
         AgentProfile profile = loadProfile(agentCode);
-        applySessionModelOverride(profile, sessionId);
-        String soul = contextContent(profile.getAgentCode(), "SOUL");
+        AiChatSession session = loadSession(sessionId);
+        VersionService.Snapshot bound = boundSnapshot(profile, session);
+        List<AgentContextFile> boundAgentFiles = null;
+        if (bound != null && bound.profile() != null) {
+            profile = bound.profile();
+            boundAgentFiles = bound.contextFiles();
+        }
+        applySessionModelOverride(profile, session);
+        String soul = contextContent(profile.getAgentCode(), "SOUL", boundAgentFiles);
         if (soul == null) {
             soul = profile.getSystemPrompt();
         }
-        String agents = contextContent(profile.getAgentCode(), "AGENTS");
+        String agents = contextContent(profile.getAgentCode(), "AGENTS", boundAgentFiles);
 
         int topK = injectTopK(profile);
         List<AgentMemory> memories = memoryService.listForInjection(
@@ -100,15 +108,37 @@ public class PersonaAssembler {
     }
 
     /**
+     * 会话绑定的灰度版本：会话的 {@code agent_version} 与当前发布版本不一致时，
+     * 说明该会话建会话时命中了灰度——按其快照组装（会话中途不切版本）。
+     */
+    private VersionService.Snapshot boundSnapshot(AgentProfile live, AiChatSession session) {
+        if (live == null || session == null) {
+            return null;
+        }
+        Integer boundVersion = session.getAgentVersion();
+        if (boundVersion == null || boundVersion.equals(live.getCurrentVersion())) {
+            return null;
+        }
+        VersionService.Snapshot snapshot = versionService.snapshot(live.getAgentCode(), boundVersion);
+        if (snapshot == null) {
+            return null;
+        }
+        return snapshot;
+    }
+
+    private AiChatSession loadSession(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return null;
+        }
+        return chatSessionMapper.selectOne(new LambdaQueryWrapper<AiChatSession>()
+                .eq(AiChatSession::getSessionId, sessionId));
+    }
+
+    /**
      * /model 指令的会话级覆盖：ai_chat_session.model_override（格式 provider/model），
      * 只影响本轮运行时选模，不改 Agent 档案。
      */
-    private void applySessionModelOverride(AgentProfile profile, String sessionId) {
-        if (sessionId == null || sessionId.isBlank()) {
-            return;
-        }
-        AiChatSession session = chatSessionMapper.selectOne(new LambdaQueryWrapper<AiChatSession>()
-                .eq(AiChatSession::getSessionId, sessionId));
+    private void applySessionModelOverride(AgentProfile profile, AiChatSession session) {
         String override = session == null ? null : session.getModelOverride();
         if (override == null || override.isBlank()) {
             return;
@@ -122,12 +152,22 @@ public class PersonaAssembler {
         }
     }
 
-    private String contextContent(String agentCode, String fileType) {
-        List<AgentContextFile> files = new ArrayList<>(contextFileMapper.selectList(
-                new LambdaQueryWrapper<AgentContextFile>()
-                        .eq(AgentContextFile::getFileType, fileType)
-                        .eq(AgentContextFile::getScope, "AGENT")
-                        .eq(AgentContextFile::getAgentCode, agentCode)));
+    /**
+     * 拼接某类身份文件内容。{@code boundAgentFiles != null} 时用版本快照里的 AGENT 级文件
+     * （灰度会话），GLOBAL 级始终取当前库内值。
+     */
+    private String contextContent(String agentCode, String fileType, List<AgentContextFile> boundAgentFiles) {
+        List<AgentContextFile> files = new ArrayList<>();
+        if (boundAgentFiles == null) {
+            files.addAll(contextFileMapper.selectList(new LambdaQueryWrapper<AgentContextFile>()
+                    .eq(AgentContextFile::getFileType, fileType)
+                    .eq(AgentContextFile::getScope, "AGENT")
+                    .eq(AgentContextFile::getAgentCode, agentCode)));
+        } else {
+            boundAgentFiles.stream()
+                    .filter(f -> fileType.equals(f.getFileType()) && "AGENT".equals(f.getScope()))
+                    .forEach(files::add);
+        }
         files.addAll(contextFileMapper.selectList(new LambdaQueryWrapper<AgentContextFile>()
                 .eq(AgentContextFile::getFileType, fileType)
                 .eq(AgentContextFile::getScope, "GLOBAL")));

@@ -96,4 +96,43 @@ class VersionServiceTest {
         assertThat(rolled.getCurrentVersion()).isEqualTo(1);
         assertThat(assistant().getModelName()).isEqualTo("deepseek-chat");
     }
+
+    @Test
+    void setGrayPointsAtPublishedVersionAndClears() {
+        versionService.publish("assistant", "tester");   // v1
+
+        AgentProfile grayed = versionService.setGray("assistant", 1, 30);
+        assertThat(grayed.getGrayVersion()).isEqualTo(1);
+        assertThat(grayed.getGrayRatio()).isEqualTo(30);
+
+        AgentProfile cleared = versionService.setGray("assistant", null, 0);
+        assertThat(cleared.getGrayVersion()).isNull();
+        assertThat(cleared.getGrayRatio()).isZero();
+        assertThat(assistant().getGrayVersion()).isNull();
+    }
+
+    @Test
+    void setGrayRejectsUnknownVersion() {
+        versionService.publish("assistant", "tester");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> versionService.setGray("assistant", 99, 50))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("版本不存在");
+    }
+
+    @Test
+    void snapshotExposesHistoricalPersona() {
+        versionService.publish("assistant", "tester");   // v1 keeps deepseek-chat
+        AgentProfile p = assistant();
+        p.setModelName("new-model");
+        profileMapper.updateById(p);
+        versionService.publish("assistant", "tester");   // v2 keeps new-model
+
+        VersionService.Snapshot v1 = versionService.snapshot("assistant", 1);
+        assertThat(v1).isNotNull();
+        assertThat(v1.profile().getModelName()).isEqualTo("deepseek-chat");
+
+        assertThat(versionService.snapshot("assistant", 99)).isNull();
+    }
 }

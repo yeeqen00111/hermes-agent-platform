@@ -17,6 +17,7 @@ import UsersView from '@/views/admin/UsersView.vue'
 import ProjectsView from '@/views/admin/ProjectsView.vue'
 import BaseConfigView from '@/views/admin/BaseConfigView.vue'
 import ModelsView from '@/views/admin/ModelsView.vue'
+import IterationsView from '@/views/admin/IterationsView.vue'
 import { navGroups } from '@/nav'
 
 const realComponents: Record<string, unknown> = {
@@ -36,6 +37,7 @@ const realComponents: Record<string, unknown> = {
   '/admin/org/people': UsersView,
   '/admin/org/projects': ProjectsView,
   '/admin/org/base-config': BaseConfigView,
+  '/admin/org/iterations': IterationsView,
 }
 
 const children: RouteRecordRaw[] = []

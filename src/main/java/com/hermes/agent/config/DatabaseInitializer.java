@@ -62,7 +62,9 @@ public class DatabaseInitializer implements ApplicationRunner {
                 "ALTER TABLE ai_mcp_tool ADD COLUMN update_by VARCHAR(64)",
                 "ALTER TABLE ai_channel ADD COLUMN create_by VARCHAR(64)",
                 "ALTER TABLE ai_channel ADD COLUMN update_by VARCHAR(64)",
-                "ALTER TABLE ai_chat_session ADD COLUMN model_override VARCHAR(128)"
+                "ALTER TABLE ai_chat_session ADD COLUMN model_override VARCHAR(128)",
+                "ALTER TABLE ai_agent_profile ADD COLUMN gray_version INT",
+                "ALTER TABLE ai_agent_profile ADD COLUMN gray_ratio INT DEFAULT 0"
         };
         for (String sql : migrations) {
             try (var stmt = connection.createStatement()) {

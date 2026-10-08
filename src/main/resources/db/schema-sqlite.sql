@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS ai_agent_profile (
     trigger_type VARCHAR(32) DEFAULT 'CHAT',
     status VARCHAR(32) DEFAULT 'DRAFT',
     current_version INT DEFAULT 1,
+    gray_version INT,
+    gray_ratio INT DEFAULT 0,
     del_flag TINYINT DEFAULT 0,
     create_by VARCHAR(64),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,

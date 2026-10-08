@@ -13,7 +13,6 @@ const HINTS: Record<string, string> = {
   '/admin/org/users': '角色 / 菜单权威在控制塔（白板 ◆复用控制塔六项），本平台复用、不重造；人员主数据见「人员管理」。',
   '/admin/org/tenant': '租户实体与权限权威在控制塔，本平台复用；等 Java 侧提供租户接口后接入。',
   '/admin/org/platform-config': '平台日志 / 用量分析 / 数据看板——后端暂无独立管理端点（用量可从「工具调用审计」取数）；大模型配置见「Agent → 模型」。',
-  '/admin/org/iterations': '迭代管理·灰度：后端 🟡 待补（无 Controller）。',
   '/admin/agent/commands': '指令（ai_command_bundle）经对话指令（/model、/bundle）生效，当前无 REST 管理端点。',
   '/report/half-day': '半天报表-AI 已接入「看板监控」页（右上「生成半天报表-AI」按钮，POST /api/dashboard/half-day-report）；定时发送由平台 cron 09:00/15:00 负责。',
   '/ops/log-alert-rules': '迁移项：智能运维（日志告警规则 / 告警监控 / 告警发送日志 / 业务指标监控 /【AI】告警报表 / 授权 / 日志清理）——现成系统在岚图，本平台只做适配。',

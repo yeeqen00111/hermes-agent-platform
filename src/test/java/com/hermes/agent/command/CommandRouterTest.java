@@ -9,6 +9,7 @@ import com.hermes.agent.mapper.AiChatMessageMapper;
 import com.hermes.agent.mapper.AiChatSessionMapper;
 import com.hermes.agent.mapper.AiCommandBundleMapper;
 import com.hermes.agent.mapper.AiModelMapper;
+import com.hermes.agent.persona.SessionVersionResolver;
 import com.hermes.agent.runtime.SessionCancellationRegistry;
 import com.hermes.agent.session.ChatStopService;
 import com.hermes.agent.session.SessionManager;
@@ -61,7 +62,8 @@ class CommandRouterTest {
         sqlSession = factory.getObject().openSession(true);
         ObjectMapper objectMapper = new ObjectMapper();
         sessions = new SessionManager(sqlSession.getMapper(AiChatSessionMapper.class),
-                sqlSession.getMapper(AiChatMessageMapper.class), objectMapper);
+                sqlSession.getMapper(AiChatMessageMapper.class), objectMapper,
+                new SessionVersionResolver(sqlSession.getMapper(AgentProfileMapper.class)));
         sessions.createSession(context.sessionId(), context.userId(), context.agentCode());
         registry = new SessionCancellationRegistry();
         ApprovalService approvalService = mock(ApprovalService.class);

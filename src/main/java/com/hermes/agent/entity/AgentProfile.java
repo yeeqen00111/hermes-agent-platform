@@ -103,6 +103,12 @@ public class AgentProfile extends BaseEntity {
      */
     private String dataScopePolicy;
 
+    /** 灰度目标版本号（NULL=未开灰度），ADR-009 §8.2 */
+    private Integer grayVersion;
+
+    /** 灰度比例 0-100：新会话按该比例指向 grayVersion */
+    private Integer grayRatio;
+
     /**
      * 执行模式: LLM_DRIVEN/FIXED_FLOW
      */

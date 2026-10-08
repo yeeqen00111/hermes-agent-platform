@@ -7,6 +7,7 @@ import com.hermes.agent.entity.AiChatMessage;
 import com.hermes.agent.entity.AiChatSession;
 import com.hermes.agent.mapper.AiChatMessageMapper;
 import com.hermes.agent.mapper.AiChatSessionMapper;
+import com.hermes.agent.persona.SessionVersionResolver;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ public class SessionManager {
     private final AiChatSessionMapper sessionMapper;
     private final AiChatMessageMapper messageMapper;
     private final ObjectMapper objectMapper;
+    private final SessionVersionResolver versionResolver;
 
     /**
      * 创建新会话（幂等：已存在则直接返回）
@@ -37,6 +39,7 @@ public class SessionManager {
         row.setSessionId(sessionId);
         row.setUserId(userId);
         row.setAgentCode(agentCode);
+        row.setAgentVersion(versionResolver.resolve(agentCode));
         row.setStatus("ACTIVE");
         row.setLastMessageTime(LocalDateTime.now());
         try {

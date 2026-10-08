@@ -35,6 +35,8 @@ CREATE TABLE ai_agent_profile (
     trigger_type VARCHAR(32) DEFAULT 'CHAT' COMMENT '触发方式: CHAT/API/SCHEDULED/WEBHOOK',
     status VARCHAR(32) DEFAULT 'DRAFT' COMMENT '状态: DRAFT/PUBLISHED/DEPRECATED',
     current_version INT DEFAULT 1 COMMENT '当前发布版本号',
+    gray_version INT COMMENT '灰度目标版本号（NULL=未开灰度）',
+    gray_ratio INT DEFAULT 0 COMMENT '灰度比例 0-100（按新会话抽样）',
     del_flag TINYINT DEFAULT 0 COMMENT '删除标记',
     create_by VARCHAR(64) COMMENT '创建人',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

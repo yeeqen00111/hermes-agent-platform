@@ -1,6 +1,7 @@
 package com.hermes.agent.persona;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hermes.agent.entity.AgentContextFile;
@@ -87,6 +88,69 @@ public class VersionService {
         }
         log.info("persona rolled back: agentCode={} -> version={}", agentCode, version);
         return profileMapper.selectById(current.getId());
+    }
+
+    /**
+     * 开/关灰度：{@code ratio<=0} 表示关闭（清空目标版本）。
+     * 开启时必须指定一个已发布的版本号，否则拒绝（灰度不能指向未发布快照）。
+     */
+    @Transactional
+    public AgentProfile setGray(String agentCode, Integer version, int ratio) {
+        AgentProfile profile = requireProfile(agentCode);
+        if (ratio <= 0) {
+            // updateById 会忽略 null，必须用 UpdateWrapper 显式清空 gray_version
+            profileMapper.update(null, new LambdaUpdateWrapper<AgentProfile>()
+                    .eq(AgentProfile::getId, profile.getId())
+                    .set(AgentProfile::getGrayVersion, null)
+                    .set(AgentProfile::getGrayRatio, 0));
+            profile.setGrayVersion(null);
+            profile.setGrayRatio(0);
+            log.info("persona gray off: agentCode={}", agentCode);
+            return profile;
+        }
+        if (version == null) {
+            throw new IllegalArgumentException("开启灰度必须指定目标版本");
+        }
+        AgentVersion row = versionMapper.selectOne(new LambdaQueryWrapper<AgentVersion>()
+                .eq(AgentVersion::getAgentCode, agentCode)
+                .eq(AgentVersion::getVersion, version));
+        if (row == null) {
+            throw new IllegalArgumentException("版本不存在: " + agentCode + "@" + version);
+        }
+        profile.setGrayVersion(version);
+        profile.setGrayRatio(Math.min(ratio, 100));
+        profileMapper.updateById(profile);
+        log.info("persona gray on: agentCode={} -> version={} ratio={}%", agentCode, version, profile.getGrayRatio());
+        return profile;
+    }
+
+    /**
+     * 读取指定版本的不可变快照（发布时的人格 + AGENT 级上下文文件）。
+     * 供灰度会话按其绑定版本组装人格包；版本不存在或快照损坏返回 null。
+     */
+    public Snapshot snapshot(String agentCode, int version) {
+        AgentVersion row = versionMapper.selectOne(new LambdaQueryWrapper<AgentVersion>()
+                .eq(AgentVersion::getAgentCode, agentCode)
+                .eq(AgentVersion::getVersion, version));
+        if (row == null) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(row.getSnapshot());
+            AgentProfile profile = objectMapper.treeToValue(root.get("profile"), AgentProfile.class);
+            List<AgentContextFile> files = new java.util.ArrayList<>();
+            for (JsonNode node : root.path("contextFiles")) {
+                files.add(objectMapper.treeToValue(node, AgentContextFile.class));
+            }
+            return new Snapshot(profile, files);
+        } catch (Exception e) {
+            log.warn("快照解析失败: agentCode={} version={} err={}", agentCode, version, e.getMessage());
+            return null;
+        }
+    }
+
+    /** 版本快照：人格 + 该 Agent 的上下文文件（NORTH 快照语义，GLOBAL 文件不入快照） */
+    public record Snapshot(AgentProfile profile, List<AgentContextFile> contextFiles) {
     }
 
     private AgentProfile requireProfile(String agentCode) {
