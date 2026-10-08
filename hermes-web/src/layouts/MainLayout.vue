@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { navGroups } from '@/nav'
+import { getActorUserId, setActorUserId } from '@/api/actor'
 
 const route = useRoute()
 const active = computed(() => route.path)
 const pageTitle = computed(() => String(route.meta.title ?? '智能开发运维平台'))
+
+const actorId = ref(getActorUserId())
+function saveActor() {
+  setActorUserId(actorId.value)
+  ElMessage.success('已切换操作人 UID=' + actorId.value)
+}
 </script>
 
 <template>
@@ -30,7 +38,16 @@ const pageTitle = computed(() => String(route.meta.title ?? '智能开发运维�
     <el-container>
       <el-header class="header">
         <span class="header-title">{{ pageTitle }}</span>
-        <span class="header-right">契约 §3 · 后端 8081</span>
+        <span class="header-right">
+          <span class="hint">操作人</span>
+          <el-input
+            v-model.number="actorId"
+            size="small"
+            style="width: 96px"
+            @keyup.enter="saveActor"
+            @blur="saveActor"
+          />
+        </span>
       </el-header>
       <el-main class="main">
         <router-view />
@@ -78,6 +95,13 @@ const pageTitle = computed(() => String(route.meta.title ?? '智能开发运维�
   font-weight: 600;
 }
 .header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #909399;
+  font-size: 12px;
+}
+.hint {
   color: #909399;
   font-size: 12px;
 }
