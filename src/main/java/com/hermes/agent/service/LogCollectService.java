@@ -109,6 +109,20 @@ public class LogCollectService {
         if (sample == null || sample.isEmpty()) {
             return Map.of("success", false, "message", "示例日志 JSON 为空");
         }
+        return parse(rule, sample);
+    }
+
+    /**
+     * 五级解析：把一段 JSON 日志按规则映射为规范字段（供预览与固化引擎复用）。
+     */
+    public Map<String, Object> parse(LogParseRule rule, String sample) {
+        if (sample == null || sample.isBlank()) {
+            return Map.of("success", false, "message", "日志 JSON 为空");
+        }
+        if (rule == null) {
+            return Map.of("success", false, "message", "解析规则为空");
+        }
+        sample = sample.trim();
         JsonNode node;
         try {
             node = MAPPER.readTree(sample);

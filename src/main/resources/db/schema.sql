@@ -776,3 +776,73 @@ CREATE TABLE IF NOT EXISTS ai_nacos_category (
     UNIQUE KEY uk_nacos_category_code (code),
     INDEX idx_nacos_category_type (category_type)
 ) ENGINE=InnoDB COMMENT='nacos 配置分类/服务分类（让配置、服务与系统挂钩）';
+
+-- ============================================
+-- 业务层 · 智能运维：日志分级-固化流程 + 告警记录 + 日志清理
+-- 固化优先级：第一 告警规则 / 第二 告警白名单 / 第三 提级告警
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_alert_rule (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '规则编码',
+    name VARCHAR(128) NOT NULL COMMENT '规则名称',
+    project_name VARCHAR(128) COMMENT '所属项目（一个项目一套配置）',
+    rule_type VARCHAR(32) NOT NULL COMMENT 'ALERT（告警规则）/ WHITELIST（告警白名单）/ PROMOTE（提级告警）',
+    priority INT DEFAULT 1 COMMENT '固化优先级：1 告警规则 / 2 白名单 / 3 提级',
+    match_pattern VARCHAR(500) COMMENT '日志匹配（正则，空=全部）',
+    level_filter VARCHAR(128) COMMENT '日志级别过滤（逗号分隔，空=不限）',
+    channel_code VARCHAR(64) COMMENT '告警去向通道编码',
+    recipient VARCHAR(256) COMMENT '接收人（邮箱/飞书账号）',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_alert_rule_code (code),
+    INDEX idx_alert_rule_type (rule_type)
+) ENGINE=InnoDB COMMENT='日志告警规则/白名单/提级（智能运维）';
+
+CREATE TABLE IF NOT EXISTS ai_alert_record (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    rule_code VARCHAR(64) COMMENT '命中的规则编码',
+    project_name VARCHAR(128) COMMENT '所属项目',
+    system_name VARCHAR(128) COMMENT '系统',
+    server_name VARCHAR(128) COMMENT '服务器',
+    log_level VARCHAR(32) COMMENT '日志级别',
+    content TEXT COMMENT '日志内容',
+    log_time DATETIME COMMENT '日志时间',
+    alert_type VARCHAR(32) COMMENT 'ALERT / PROMOTE',
+    status VARCHAR(32) COMMENT 'SENT / FAILED / NO_CHANNEL / SUPPRESSED',
+    channel_code VARCHAR(64) COMMENT '发送通道',
+    recipient VARCHAR(256) COMMENT '接收人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_alert_record_time (create_time)
+) ENGINE=InnoDB COMMENT='告警记录（固化流程产出）';
+
+CREATE TABLE IF NOT EXISTS ai_log_retention (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    data_type VARCHAR(32) NOT NULL COMMENT 'FULL（全量）/ ALERT（告警）/ PROMOTE（提级告警）',
+    retention_days INT NOT NULL COMMENT '保留天数',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    remark VARCHAR(500) COMMENT '备注',
+    UNIQUE KEY uk_log_retention_type (data_type)
+) ENGINE=InnoDB COMMENT='日志分级保留策略（全量 3 / 告警 7 / 提级 7 天）';
+
+CREATE TABLE IF NOT EXISTS ai_log_ingest_stat (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    project_name VARCHAR(128) NOT NULL COMMENT '所属项目',
+    last_ingest_time DATETIME COMMENT '上次接收过滤时间',
+    total_ingested INT DEFAULT 0 COMMENT '累计接收条数',
+    total_alert INT DEFAULT 0 COMMENT '累计告警条数',
+    total_promote INT DEFAULT 0 COMMENT '累计提级条数',
+    total_suppress INT DEFAULT 0 COMMENT '累计白名单拦截条数',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_log_ingest_project (project_name)
+) ENGINE=InnoDB COMMENT='日志接收/过滤统计（告警监控取数）';
+
+INSERT IGNORE INTO ai_log_retention (data_type, retention_days, enabled, remark) VALUES
+('FULL', 3, 1, '全量日志保留 3 天'),
+('ALERT', 7, 1, '告警日志保留 7 天'),
+('PROMOTE', 7, 1, '提级告警日志保留 7 天');

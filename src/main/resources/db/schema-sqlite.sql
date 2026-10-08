@@ -797,3 +797,71 @@ CREATE TABLE IF NOT EXISTS ai_nacos_category (
 );
 
 CREATE INDEX IF NOT EXISTS idx_nacos_category_type ON ai_nacos_category(category_type);
+
+-- ============================================
+-- 业务层 · 智能运维：日志分级-固化流程 + 告警记录 + 日志清理
+-- 固化优先级：第一 告警规则 / 第二 告警白名单 / 第三 提级告警
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_alert_rule (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    project_name VARCHAR(128),
+    rule_type VARCHAR(32) NOT NULL,
+    priority INT DEFAULT 1,
+    match_pattern VARCHAR(500),
+    level_filter VARCHAR(128),
+    channel_code VARCHAR(64),
+    recipient VARCHAR(256),
+    enabled TINYINT DEFAULT 1,
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_alert_record (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_code VARCHAR(64),
+    project_name VARCHAR(128),
+    system_name VARCHAR(128),
+    server_name VARCHAR(128),
+    log_level VARCHAR(32),
+    content TEXT,
+    log_time DATETIME,
+    alert_type VARCHAR(32),
+    status VARCHAR(32),
+    channel_code VARCHAR(64),
+    recipient VARCHAR(256),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_rule_type ON ai_alert_rule(rule_type);
+CREATE INDEX IF NOT EXISTS idx_alert_record_time ON ai_alert_record(create_time);
+
+CREATE TABLE IF NOT EXISTS ai_log_retention (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    data_type VARCHAR(32) NOT NULL UNIQUE,
+    retention_days INT NOT NULL,
+    enabled TINYINT DEFAULT 1,
+    remark VARCHAR(500)
+);
+
+CREATE TABLE IF NOT EXISTS ai_log_ingest_stat (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_name VARCHAR(128) NOT NULL UNIQUE,
+    last_ingest_time DATETIME,
+    total_ingested INT DEFAULT 0,
+    total_alert INT DEFAULT 0,
+    total_promote INT DEFAULT 0,
+    total_suppress INT DEFAULT 0,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO ai_log_retention (data_type, retention_days, enabled, remark) VALUES
+('FULL', 3, 1, '全量日志保留 3 天'),
+('ALERT', 7, 1, '告警日志保留 7 天'),
+('PROMOTE', 7, 1, '提级告警日志保留 7 天');
