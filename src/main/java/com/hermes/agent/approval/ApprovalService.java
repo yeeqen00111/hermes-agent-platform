@@ -74,6 +74,10 @@ public class ApprovalService {
     }
 
     public boolean isWhitelisted(String toolCode, Long userId) {
+        // 历史授权保留供审计，但不得绕过当前的始终允许边界。
+        if (!IDEMPOTENT_WRITE_TOOLS.contains(toolCode)) {
+            return false;
+        }
         long uid = userId == null ? 0L : userId;
         Long count = whitelistMapper.selectCount(new LambdaQueryWrapper<ApprovalWhitelist>()
                 .eq(ApprovalWhitelist::getToolCode, toolCode)

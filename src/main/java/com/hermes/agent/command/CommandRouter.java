@@ -203,12 +203,12 @@ public class CommandRouter {
                 .filter(o -> o != null && !o.isBlank())
                 .orElseGet(() -> profileModel(ctx));
         Integer window = null;
-        if (model != null) {
-            String modelName = model.contains("/") ? model.substring(model.indexOf('/') + 1) : model;
+        int separator = model == null ? -1 : model.indexOf('/');
+        if (separator > 0) {
             AiModel m = modelMapper.selectOne(new LambdaQueryWrapper<AiModel>()
-                    .eq(AiModel::getModelName, modelName)
-                    .eq(AiModel::getEnabled, 1)
-                    .last("limit 1"));
+                    .eq(AiModel::getProviderCode, model.substring(0, separator))
+                    .eq(AiModel::getModelName, model.substring(separator + 1))
+                    .eq(AiModel::getEnabled, 1));
             window = m == null ? null : m.getContextWindow();
         }
         StringBuilder sb = new StringBuilder();
@@ -218,12 +218,11 @@ public class CommandRouter {
         if (model != null) {
             sb.append("- 当前模型：").append(model);
             if (window != null && window > 0) {
-                sb.append("，上下文窗口 ").append(window)
-                        .append("（约 ").append(window / 4).append(" tokens）");
+                sb.append("，上下文窗口 ").append(window).append(" tokens");
             }
             sb.append('\n');
         }
-        sb.append("- 提示：历史按窗口回读，系统提示与技能索引每轮重新装配");
+        sb.append("- 提示：仅统计最近 500 条历史的字符数，不代表完整 token 占用；系统提示与技能索引每轮重新装配");
         return CommandResult.success(sb.toString());
     }
 
