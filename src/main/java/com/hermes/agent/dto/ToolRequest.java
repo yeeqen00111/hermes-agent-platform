@@ -1,6 +1,7 @@
 package com.hermes.agent.dto;
 
 import lombok.Data;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -52,6 +53,12 @@ public class ToolRequest {
      * 是否干跑（WRITE级工具强制先校验）
      */
     private Boolean dryRun = false;
+
+    /**
+     * 数据范围（服务端由 X-Data-Scope 注入，模型不可见不可改）：
+     * 键=维度（environment/projectCode/serviceName/system），值=允许值，{@code "*"} 通配
+     */
+    private Map<String, List<String>> dataScope;
 
     /**
      * 工具参数

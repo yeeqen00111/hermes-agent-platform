@@ -151,6 +151,8 @@ public class AgentRuntime {
             tr.setAgentCode(request.getAgentCode());
             tr.setUserId(request.getUserId());
             tr.setChannel(request.getChannel());
+            tr.setDataScope(request.getDataScope());
+            tr.setEnvironment(request.getEnvironment());
             Map<String, Object> args = new HashMap<>();
             node.path("arguments").fields().forEachRemaining(e ->
                     args.put(e.getKey(), e.getValue().isValueNode() ? e.getValue().asText() : e.getValue()));

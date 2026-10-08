@@ -102,6 +102,8 @@ public class FlowExecutor {
         tr.setAgentCode(pack.getAgentCode());
         tr.setUserId(request.getUserId());
         tr.setChannel("flow");
+        tr.setDataScope(request.getDataScope());
+        tr.setEnvironment(request.getEnvironment());
         Map<String, Object> args = new HashMap<>();
         args.put("input", stepInput);
         tr.setArguments(args);

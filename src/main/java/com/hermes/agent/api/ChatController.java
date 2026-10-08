@@ -3,6 +3,7 @@ package com.hermes.agent.api;
 import com.hermes.agent.approval.ApprovalService;
 import com.hermes.agent.approval.ApprovalSink;
 import com.hermes.agent.command.CommandRouter;
+import com.hermes.agent.common.DataScopeParser;
 import com.hermes.agent.dto.SSEEvent;
 import com.hermes.agent.common.enums.SSEEventType;
 import com.hermes.agent.entity.ApprovalRequest;
@@ -37,6 +38,7 @@ public class ChatController {
     private final AgentRuntime agentRuntime;
     private final ApprovalService approvalService;
     private final ChatStopService chatStopService;
+    private final DataScopeParser dataScopeParser;
 
     /**
      * 发送消息（SSE流式返回）
@@ -44,7 +46,13 @@ public class ChatController {
     @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chat(@RequestBody ChatRequest request,
                            @RequestHeader(value = "X-Actor-User-Id", required = false) Long userId,
-                           @RequestHeader(value = "X-Trace-Id", required = false) String traceId) {
+                           @RequestHeader(value = "X-Trace-Id", required = false) String traceId,
+                           @RequestHeader(value = "X-Data-Scope", required = false) String dataScopeHeader,
+                           @RequestHeader(value = "X-Actor-Env", required = false) String actorEnv) {
+
+        // 数据范围（契约 §3.6）：只认 Java 转发注入的 header，作为本轮所有工具调用的授权上限
+        Map<String, List<String>> dataScope = dataScopeParser.parse(dataScopeHeader);
+        final String environment = (actorEnv == null || actorEnv.isBlank()) ? null : actorEnv.trim();
 
         String sessionId = request.getSessionId();
         if (sessionId == null || sessionId.isEmpty()) {
@@ -69,14 +77,14 @@ public class ChatController {
             if (cmdResult.isRouteToChat()) {
                 // 技能/捆绑包指令：正文拼到本轮用户消息前，走正常对话（§7.2）
                 String augmented = cmdResult.getContext() + "\n\n用户消息：\n" + request.getMessage();
-                return handleChatStream(sid, request, effectiveTraceId, userId, augmented);
+                return handleChatStream(sid, request, effectiveTraceId, userId, augmented, dataScope, environment);
             }
             // 是指令，直接返回结果
             return handleCommandResponse(sid, cmdResult);
         }
 
         // 普通对话，流式返回
-        return handleChatStream(sid, request, effectiveTraceId, userId, request.getMessage());
+        return handleChatStream(sid, request, effectiveTraceId, userId, request.getMessage(), dataScope, environment);
     }
 
     /**
@@ -153,7 +161,8 @@ public class ChatController {
      * @param effectiveInput 实际进模型的消息（技能指令会带并进的正文）；会话历史仍存用户原始消息
      */
     private SseEmitter handleChatStream(String sessionId, ChatRequest request, String traceId,
-                                        Long userId, String effectiveInput) {
+                                        Long userId, String effectiveInput,
+                                        Map<String, List<String>> dataScope, String environment) {
         // 审批可能阻塞整轮，SSE 存活时间必须大于审批超时
         SseEmitter emitter = new SseEmitter((approvalService.getTimeoutSeconds() + 60) * 1000L);
 
@@ -173,6 +182,8 @@ public class ChatController {
                         .userInput(effectiveInput)
                         .traceId(traceId)
                         .channel("chat")
+                        .dataScope(dataScope)
+                        .environment(environment)
                         .build();
 
                 AgentRunResult result = agentRuntime.stream(runRequest,

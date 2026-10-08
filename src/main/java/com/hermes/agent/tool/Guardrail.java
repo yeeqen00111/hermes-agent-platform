@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 安全护栏（工具调用前的校验，对齐 interface-contract §4.3）。
@@ -13,6 +14,12 @@ import java.util.Map;
 @Slf4j
 @Component
 public class Guardrail {
+
+    /** 契约 §3.6 的数据范围维度；其余 scopeFields（如 skillCode）非数据维度，不参与校验 */
+    private static final Set<String> SCOPE_DIMENSIONS = Set.of("environment", "projectCode", "serviceName", "system");
+
+    /** scopeFields 名 → 工具入参名（历史命名差异：serviceName 对应入参 service） */
+    private static final Map<String, String> SCOPE_ARG_ALIAS = Map.of("serviceName", "service");
 
     /**
      * 校验结果
@@ -123,11 +130,54 @@ public class Guardrail {
     }
 
     private boolean validateDataScope(ToolDefinition toolDef, ToolRequest request) {
-        if (toolDef.getScopeFields() == null || toolDef.getScopeFields().isEmpty()) {
+        List<String> scopeFields = toolDef.getScopeFields();
+        if (scopeFields == null || scopeFields.isEmpty()) {
             return true;
         }
-        // 数据范围授权源（X-Data-Scope 注入 + 用户/身份包 dataScope 策略）尚未接线，
-        // 此处不伪造校验；待授权模型落地后在此比对 scopeFields（00-status §1 登记）。
+        // 只有真正的数据维度参与校验；skillCode 等非数据维度（如 skill.load）跳过，避免误拦
+        Map<String, List<String>> scope = request.getDataScope();
+        if (scope == null || scope.isEmpty()) {
+            // X-Data-Scope 未注入（Java 数据面尚未接线）：放行并告警，与 §3.7「未配置则开发放行并告警」同策略（ADR-013）
+            log.warn("工具 {} 声明数据范围 {} 但本轮未注入 X-Data-Scope，放行（fail-open）",
+                    toolDef.getToolCode(), scopeFields);
+            return true;
+        }
+        Map<String, Object> args = request.getArguments() == null ? Map.of() : request.getArguments();
+        for (String field : scopeFields) {
+            if (!SCOPE_DIMENSIONS.contains(field)) {
+                continue;
+            }
+            String requested = requestedValue(field, args, request);
+            if (requested == null || requested.isBlank()) {
+                continue; // 调用未限定该维度，交由下游按 X-Data-Scope 做行级过滤
+            }
+            List<String> allowed = scope.get(field);
+            if (allowed == null || allowed.isEmpty()) {
+                continue; // Java 未对该维度设限 → 不限制
+            }
+            boolean ok = allowed.stream().anyMatch(a -> "*".equals(a) || matches(field, a, requested));
+            if (!ok) {
+                log.warn("工具 {} 入参 {}={} 超出 X-Data-Scope 允许范围 {}",
+                        toolDef.getToolCode(), field, requested, allowed);
+                return false;
+            }
+        }
         return true;
+    }
+
+    /** 数据维度 → 工具入参名（历史命名差异：scopeFields 的 serviceName 对应入参 service） */
+    private String requestedValue(String field, Map<String, Object> args, ToolRequest request) {
+        // environment 以服务端注入的 X-Actor-Env 为权威，防止模型在入参里伪造环境绕过
+        if ("environment".equals(field) && request.getEnvironment() != null && !request.getEnvironment().isBlank()) {
+            return request.getEnvironment();
+        }
+        String argName = SCOPE_ARG_ALIAS.getOrDefault(field, field);
+        Object value = args.get(argName);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    /** environment 大小写不敏感（prod/PROD），其余维度精确匹配 */
+    private boolean matches(String field, String allowed, String requested) {
+        return "environment".equals(field) ? allowed.equalsIgnoreCase(requested) : allowed.equals(requested);
     }
 }
