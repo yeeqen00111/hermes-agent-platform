@@ -6,6 +6,15 @@ import PlaceholderView from '@/views/PlaceholderView.vue'
 import ReviewRulesView from '@/views/review/ReviewRulesView.vue'
 import ReviewTasksView from '@/views/review/ReviewTasksView.vue'
 import ReviewRecordsView from '@/views/review/ReviewRecordsView.vue'
+import AgentProfilesView from '@/views/admin/AgentProfilesView.vue'
+import SkillsView from '@/views/admin/SkillsView.vue'
+import McpServersView from '@/views/admin/McpServersView.vue'
+import ChannelsView from '@/views/admin/ChannelsView.vue'
+import ReposView from '@/views/admin/ReposView.vue'
+import CredentialsView from '@/views/admin/CredentialsView.vue'
+import UsersView from '@/views/admin/UsersView.vue'
+import ProjectsView from '@/views/admin/ProjectsView.vue'
+import BaseConfigView from '@/views/admin/BaseConfigView.vue'
 import { navGroups } from '@/nav'
 
 const realComponents: Record<string, unknown> = {
@@ -14,6 +23,15 @@ const realComponents: Record<string, unknown> = {
   '/review/rules': ReviewRulesView,
   '/review/tasks': ReviewTasksView,
   '/review/records': ReviewRecordsView,
+  '/admin/system/repo': ReposView,
+  '/admin/system/credential': CredentialsView,
+  '/admin/agent/profiles': AgentProfilesView,
+  '/admin/agent/skills': SkillsView,
+  '/admin/agent/channels': ChannelsView,
+  '/admin/agent/mcp': McpServersView,
+  '/admin/org/people': UsersView,
+  '/admin/org/projects': ProjectsView,
+  '/admin/org/base-config': BaseConfigView,
 }
 
 const children: RouteRecordRaw[] = []
