@@ -12,9 +12,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 流程监控告警（白板：看板监控 → 状态告警"失败?"、告警 → 时间告警/时间先后）。
@@ -48,11 +49,23 @@ public class FlowMonitorService {
     @Value("${hermes.monitor.alert-recipient:}")
     private String alertRecipient;
 
-    /** 启动时刻作为首个 watermark：不回告历史 */
+    @Value("${hermes.monitor.alert-cache-max:10000}")
+    private int alertCacheMax = 10000;
+
+    /** 启动时刻作为首个 watermark：不回告历史。仅在整轮扫描成功后推进，失败时下轮重扫（防漏报）。 */
     private volatile LocalDateTime lastScan = LocalDateTime.now();
 
-    /** 已告警的步骤（key = 类型:stepLogId），防同一步骤反复告警 */
-    private final Set<String> alerted = ConcurrentHashMap.newKeySet();
+    /**
+     * 已告警的步骤（key = 类型:stepLogId），防同一步骤反复告警。
+     * 有界 FIFO：超过 alertCacheMax 逐出最旧键，防长期运行内存无界。
+     */
+    private final Set<String> alerted = Collections.synchronizedSet(Collections.newSetFromMap(
+            new LinkedHashMap<>(256, 0.75f, false) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+                    return size() > alertCacheMax;
+                }
+            }));
 
     @PostConstruct
     void init() {
@@ -66,15 +79,16 @@ public class FlowMonitorService {
         }
         LocalDateTime from = lastScan;
         LocalDateTime now = LocalDateTime.now();
-        lastScan = now;
 
         try {
             scanNewOutcomes(from, now);
             scanStuck(now);
             scanSlow(from);
             scanOrderViolations(from);
+            // 全部成功才推进 watermark；异常时保持不动，下轮重扫同一窗口
+            lastScan = now;
         } catch (Exception e) {
-            log.warn("流程监控扫描异常: {}", e.getMessage(), e);
+            log.warn("流程监控扫描异常，watermark 不推进，下轮重扫: {}", e.getMessage(), e);
         }
     }
 
