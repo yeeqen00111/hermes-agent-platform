@@ -756,3 +756,44 @@ CREATE TABLE IF NOT EXISTS ai_log_parse_rule (
 );
 
 CREATE INDEX IF NOT EXISTS idx_log_parse_channel ON ai_log_parse_rule(channel_code);
+
+-- ============================================
+-- 系统管理 · nacos 服务器（图2：nacos → nacos配置 → HERMES；nacos服务数量监控 → 告警）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_nacos_server (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    server_addr VARCHAR(256),
+    namespace_id VARCHAR(128),
+    username VARCHAR(128),
+    secret_ref VARCHAR(128),
+    enabled TINYINT DEFAULT 1,
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_nacos_category (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    category_type VARCHAR(32) NOT NULL,
+    server_code VARCHAR(64),
+    system_name VARCHAR(128),
+    group_name VARCHAR(128),
+    match_pattern VARCHAR(256),
+    enabled TINYINT DEFAULT 1,
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_nacos_category_type ON ai_nacos_category(category_type);

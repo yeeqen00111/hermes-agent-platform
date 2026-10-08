@@ -18,6 +18,7 @@ import BaseConfigView from '@/views/admin/BaseConfigView.vue'
 import ModelsView from '@/views/admin/ModelsView.vue'
 import IterationsView from '@/views/admin/IterationsView.vue'
 import LogCollectView from '@/views/admin/LogCollectView.vue'
+import NacosView from '@/views/admin/NacosView.vue'
 import { navGroups } from '@/nav'
 
 const realComponents: Record<string, unknown> = {
@@ -29,6 +30,7 @@ const realComponents: Record<string, unknown> = {
   '/admin/system/repo': ReposView,
   '/admin/system/credential': CredentialsView,
   '/admin/system/log-collect': LogCollectView,
+  '/admin/system/nacos': NacosView,
   '/admin/agent/profiles': AgentProfilesView,
   '/admin/agent/skills': SkillsView,
   '/admin/agent/channels': ChannelsView,

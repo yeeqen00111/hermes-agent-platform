@@ -8,7 +8,6 @@ const group = computed(() => String(route.meta.group ?? ''))
 
 /** 占位屏的真实原因——如实标注，不糊弄（判据=后端有没有端点/权威在哪） */
 const HINTS: Record<string, string> = {
-  '/admin/system/nacos': '本平台实现中：nacos 服务器（配置凭据 / 配置分类 / 服务分类），按白板「系统管理」在本平台建设。',
   '/admin/org/users': '角色 / 菜单权威在控制塔（白板 ◆复用控制塔六项），本平台复用、不重造；人员主数据见「人员管理」。',
   '/admin/org/tenant': '租户实体与权限权威在控制塔，本平台复用；等 Java 侧提供租户接口后接入。',
   '/admin/org/platform-config': '平台日志 / 用量分析 / 数据看板——后端暂无独立管理端点（用量可从「工具调用审计」取数）；大模型配置见「Agent → 模型」。',

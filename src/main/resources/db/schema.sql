@@ -734,3 +734,45 @@ CREATE TABLE IF NOT EXISTS ai_log_parse_rule (
     UNIQUE KEY uk_log_parse_code (code),
     INDEX idx_log_parse_channel (channel_code)
 ) ENGINE=InnoDB COMMENT='日志JSON解析规则（系统/时间/级别/内容/服务 五级）';
+
+-- ============================================
+-- 系统管理 · nacos 服务器（图2：nacos → nacos配置 → HERMES；nacos服务数量监控 → 告警）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_nacos_server (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '服务器编码',
+    name VARCHAR(128) NOT NULL COMMENT '服务器名称',
+    server_addr VARCHAR(256) COMMENT 'nacos 地址（http://host:8848）',
+    namespace_id VARCHAR(128) COMMENT '命名空间',
+    username VARCHAR(128) COMMENT '账号',
+    secret_ref VARCHAR(128) COMMENT '凭据引用（环境变量名，不存明文）',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_nacos_server_code (code)
+) ENGINE=InnoDB COMMENT='nacos 服务器/配置凭据（系统管理）';
+
+CREATE TABLE IF NOT EXISTS ai_nacos_category (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '分类编码',
+    name VARCHAR(128) NOT NULL COMMENT '分类名称',
+    category_type VARCHAR(32) NOT NULL COMMENT 'CONFIG（配置分类）/ SERVICE（服务分类）',
+    server_code VARCHAR(64) COMMENT '关联 nacos 服务器编码',
+    system_name VARCHAR(128) COMMENT '挂钩的系统',
+    group_name VARCHAR(128) COMMENT 'nacos group',
+    match_pattern VARCHAR(256) COMMENT '匹配模式（data_id / 服务名前缀）',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_nacos_category_code (code),
+    INDEX idx_nacos_category_type (category_type)
+) ENGINE=InnoDB COMMENT='nacos 配置分类/服务分类（让配置、服务与系统挂钩）';
