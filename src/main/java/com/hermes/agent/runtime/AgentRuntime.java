@@ -36,11 +36,15 @@ public class AgentRuntime {
     private static final Pattern TOOL_CALL = Pattern.compile("```tool_call\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
     private static final int MAX_TOOL_ROUNDS = 4;
 
+    /** 用户中断空轮结果的固定文案（也作为助手消息落库，保持审计完整） */
+    public static final String INTERRUPTED_REPLY = "（本轮生成已被用户中止）";
+
     private final PersonaAssembler personaAssembler;
     private final LlmGateway llmGateway;
     private final ToolExecutor toolExecutor;
     private final FlowExecutor flowExecutor;
     private final SessionManager sessionManager;
+    private final SessionCancellationRegistry cancellationRegistry;
     private final ObjectMapper objectMapper;
 
     public AgentRunResult run(AgentRunRequest request) {
@@ -70,34 +74,62 @@ public class AgentRuntime {
         PersonaPack pack = personaAssembler.assemble(
                 request.getAgentCode(), request.getUserId(), request.getSessionId());
 
-        if (pack.isFixedFlow()) {
-            return flowExecutor.execute(pack, request);
-        }
-
-        List<LlmMessage> messages = buildMessages(pack, request);
+        // 以 sessionId 注册本轮运行；停止方置位后各检查点尽早退出（ADR-012）
+        SessionCancellationRegistry.Handle handle = cancellationRegistry.register(request.getSessionId());
         AgentRunResult result = AgentRunResult.builder().build();
-
-        for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
-            boolean lastRound = round == MAX_TOOL_ROUNDS - 1;
-            String reply = llmGateway.chat(pack.getProfile(), messages);
-
-            Matcher m = TOOL_CALL.matcher(reply);
-            if (!m.find() || lastRound) {
-                String finalReply = m.find()
-                        ? reply.replaceAll("```tool_call\\s*\\{.*?}\\s*```", "").trim()
-                        : reply;
-                result.setReply(finalReply);
-                if (onDelta != null && finalReply != null && !finalReply.isEmpty()) {
-                    emitChunks(finalReply, onDelta);
-                }
-                return result;
+        try {
+            if (handle.isCancelled()) {
+                return interruptedResult(result);
+            }
+            if (pack.isFixedFlow()) {
+                return flowExecutor.execute(pack, request);
             }
 
-            messages.add(LlmMessage.assistant(reply));
-            String toolResultText = executeToolCall(m.group(1), request, result, onToolEvent, approvalSink);
-            messages.add(LlmMessage.tool(toolResultText));
+            List<LlmMessage> messages = buildMessages(pack, request);
+
+            for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
+                if (handle.isCancelled()) {
+                    return interruptedResult(result);
+                }
+                boolean lastRound = round == MAX_TOOL_ROUNDS - 1;
+                String reply = llmGateway.chat(pack.getProfile(), messages);
+                // 同步 LLM 调用期间无法打断，返回后第一时间检查（ADR-012）
+                if (handle.isCancelled()) {
+                    return interruptedResult(result);
+                }
+
+                Matcher m = TOOL_CALL.matcher(reply);
+                if (!m.find() || lastRound) {
+                    String finalReply = m.find()
+                            ? reply.replaceAll("```tool_call\\s*\\{.*?}\\s*```", "").trim()
+                            : reply;
+                    result.setReply(finalReply);
+                    if (onDelta != null && finalReply != null && !finalReply.isEmpty()) {
+                        emitChunks(finalReply, onDelta);
+                    }
+                    return result;
+                }
+
+                messages.add(LlmMessage.assistant(reply));
+                if (handle.isCancelled()) {
+                    return interruptedResult(result);
+                }
+                String toolResultText = executeToolCall(m.group(1), request, result, onToolEvent, approvalSink);
+                messages.add(LlmMessage.tool(toolResultText));
+            }
+            return result;
+        } finally {
+            cancellationRegistry.unregister(request.getSessionId(), handle);
         }
-        return result;
+    }
+
+    /** 中断轮结果：不追加模型收尾，已产生的工具事件保留（SSE 已发出，落库一致） */
+    private AgentRunResult interruptedResult(AgentRunResult partial) {
+        return AgentRunResult.builder()
+                .toolEvents(partial.getToolEvents())
+                .reply(INTERRUPTED_REPLY)
+                .interrupted(true)
+                .build();
     }
 
     private void emitChunks(String text, Consumer<String> onDelta) {

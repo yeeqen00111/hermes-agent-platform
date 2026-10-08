@@ -24,6 +24,9 @@ public class AgentRunResult {
 
     private boolean fixedFlow;
 
+    /** 本轮是否被中断（/stop、/new、interrupt API → ADR-012） */
+    private boolean interrupted;
+
     @Data
     @AllArgsConstructor
     public static class ToolEvent {

@@ -9,6 +9,7 @@ import com.hermes.agent.entity.ApprovalRequest;
 import com.hermes.agent.runtime.AgentRunRequest;
 import com.hermes.agent.runtime.AgentRunResult;
 import com.hermes.agent.runtime.AgentRuntime;
+import com.hermes.agent.session.ChatStopService;
 import com.hermes.agent.session.SessionManager;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ public class ChatController {
     private final CommandRouter commandRouter;
     private final AgentRuntime agentRuntime;
     private final ApprovalService approvalService;
+    private final ChatStopService chatStopService;
 
     /**
      * 发送消息（SSE流式返回）
@@ -53,9 +55,12 @@ public class ChatController {
         final String effectiveTraceId = (traceId == null || traceId.isBlank())
                 ? UUID.randomUUID().toString() : traceId;
 
-        // 创建或获取会话
-        sessionManager.getSession(sid).orElseGet(() ->
+        // 创建或获取会话；停止过的会话再次发消息时自动重新激活
+        SessionManager.ChatSession session = sessionManager.getSession(sid).orElseGet(() ->
                 sessionManager.createSession(sid, userId != null ? userId : 0L, request.getAgentCode()));
+        if ("STOPPED".equals(session.getStatus())) {
+            sessionManager.markActive(sid);
+        }
 
         // 检查是否是指令
         CommandRouter.CommandResult cmdResult = commandRouter.route(request.getMessage(),
@@ -96,14 +101,12 @@ public class ChatController {
     }
 
     /**
-     * 停止生成
+     * 停止生成（#54：与 /stop 同一链路——取消在跑轮+取消待审卡+库置 STOPPED）
      */
     @PostMapping("/sessions/{sessionId}/interrupt")
     public Map<String, Object> stopGeneration(@PathVariable String sessionId) {
-        sessionManager.stopSession(sessionId);
-        approvalService.pending(sessionId, null)
-                .forEach(card -> approvalService.cancel(card.getRequestId(), "会话被用户中断"));
-        return Map.of("success", true, "message", "已停止生成");
+        boolean hadRunning = chatStopService.stopRun(sessionId, "会话被用户中断");
+        return Map.of("success", true, "message", "已停止生成", "hadRunning", hadRunning);
     }
 
     /**
@@ -192,7 +195,8 @@ public class ChatController {
                         .name(SSEEventType.MESSAGE_COMPLETE.getType())
                         .data(Map.of("sessionId", sessionId,
                                 "toolEvents", result.getToolEvents(),
-                                "fixedFlow", result.isFixedFlow())));
+                                "fixedFlow", result.isFixedFlow(),
+                                "interrupted", result.isInterrupted())));
                 emitter.complete();
             } catch (IOException e) {
                 emitter.completeWithError(e);

@@ -3,11 +3,14 @@ package com.hermes.agent.command;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hermes.agent.approval.ApprovalService;
 import com.hermes.agent.mapper.AgentProfileMapper;
 import com.hermes.agent.mapper.AiChatMessageMapper;
 import com.hermes.agent.mapper.AiChatSessionMapper;
 import com.hermes.agent.mapper.AiCommandBundleMapper;
 import com.hermes.agent.mapper.AiModelMapper;
+import com.hermes.agent.runtime.SessionCancellationRegistry;
+import com.hermes.agent.session.ChatStopService;
 import com.hermes.agent.session.SessionManager;
 import com.hermes.agent.skill.SkillRegistry;
 import org.apache.ibatis.session.LocalCacheScope;
@@ -21,8 +24,13 @@ import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class CommandRouterTest {
 
@@ -32,6 +40,7 @@ class CommandRouterTest {
     private SqlSession sqlSession;
     private JdbcTemplate jdbc;
     private SessionManager sessions;
+    private SessionCancellationRegistry registry;
     private CommandRouter router;
 
     @BeforeEach
@@ -54,9 +63,13 @@ class CommandRouterTest {
         sessions = new SessionManager(sqlSession.getMapper(AiChatSessionMapper.class),
                 sqlSession.getMapper(AiChatMessageMapper.class), objectMapper);
         sessions.createSession(context.sessionId(), context.userId(), context.agentCode());
+        registry = new SessionCancellationRegistry();
+        ApprovalService approvalService = mock(ApprovalService.class);
+        when(approvalService.pending(any(), isNull())).thenReturn(List.of());
+        ChatStopService chatStopService = new ChatStopService(registry, sessions, approvalService);
         router = new CommandRouter(mock(SkillRegistry.class), mock(AiCommandBundleMapper.class),
                 sqlSession.getMapper(AgentProfileMapper.class), sqlSession.getMapper(AiModelMapper.class),
-                sessions, objectMapper);
+                sessions, chatStopService, objectMapper);
         ReflectionTestUtils.invokeMethod(router, "registerBuiltinCommands");
     }
 
@@ -156,6 +169,49 @@ class CommandRouterTest {
         assertThat(router.route("/model missing/model", context).getErrorCode()).isEqualTo("UNKNOWN_MODEL");
         assertThat(sessions.getSession(context.sessionId()).orElseThrow().getModelOverride())
                 .isEqualTo("glm/glm-4-flash");
+    }
+
+    @Test
+    void stopCommandCancelsRunningRoundAndMarksSessionStopped() {
+        SessionCancellationRegistry.Handle handle = registry.register(context.sessionId());
+
+        CommandRouter.CommandResult result = router.route("/stop", context);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getMessage()).contains("已停止正在进行的生成");
+        assertThat(handle.isCancelled()).isTrue();
+        assertThat(sessionStatus()).isEqualTo("STOPPED");
+    }
+
+    @Test
+    void newCommandStopsSessionAndAdvisesFreshSessionId() {
+        SessionCancellationRegistry.Handle handle = registry.register(context.sessionId());
+
+        CommandRouter.CommandResult result = router.route("/new", context);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getMessage()).contains("新会话请换一个新的 sessionId");
+        assertThat(handle.isCancelled()).isTrue();
+        assertThat(sessionStatus()).isEqualTo("STOPPED");
+    }
+
+    @Test
+    void stopWhenNothingIsRunningStillMarksSessionStopped() {
+        CommandRouter.CommandResult result = router.route("/stop", context);
+
+        assertThat(result.getMessage()).contains("当前没有进行中的生成");
+        assertThat(sessionStatus()).isEqualTo("STOPPED");
+    }
+
+    @Test
+    void stopAndNewWithoutSessionContextDegradeGracefully() {
+        assertThat(router.route("/stop").getMessage()).contains("需要会话上下文");
+        assertThat(router.route("/new").getMessage()).contains("需要会话上下文");
+    }
+
+    private String sessionStatus() {
+        return jdbc.queryForObject(
+                "SELECT status FROM ai_chat_session WHERE session_id = 'session-a'", String.class);
     }
 
     private void insertModel(String provider, String name, int window, int enabled) {

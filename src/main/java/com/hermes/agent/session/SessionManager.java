@@ -115,6 +115,15 @@ public class SessionManager {
     }
 
     /**
+     * 会话重新激活（停止后的会话再次发消息时恢复 ACTIVE）
+     */
+    public void markActive(String sessionId) {
+        sessionMapper.update(null, new LambdaUpdateWrapper<AiChatSession>()
+                .eq(AiChatSession::getSessionId, sessionId)
+                .set(AiChatSession::getStatus, "ACTIVE"));
+    }
+
+    /**
      * 列出用户的会话（按最后消息时间倒序，分页）
      */
     public List<ChatSession> listSessions(Long userId, int page, int size) {

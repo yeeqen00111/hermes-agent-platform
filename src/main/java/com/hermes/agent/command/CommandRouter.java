@@ -10,6 +10,7 @@ import com.hermes.agent.entity.Skill;
 import com.hermes.agent.mapper.AgentProfileMapper;
 import com.hermes.agent.mapper.AiCommandBundleMapper;
 import com.hermes.agent.mapper.AiModelMapper;
+import com.hermes.agent.session.ChatStopService;
 import com.hermes.agent.session.SessionManager;
 import com.hermes.agent.skill.SkillRegistry;
 import jakarta.annotation.PostConstruct;
@@ -35,6 +36,7 @@ public class CommandRouter {
     private final AgentProfileMapper profileMapper;
     private final AiModelMapper modelMapper;
     private final SessionManager sessionManager;
+    private final ChatStopService chatStopService;
     private final ObjectMapper objectMapper;
 
     private final Map<String, CommandHandler> builtinCommands = new ConcurrentHashMap<>();
@@ -45,8 +47,8 @@ public class CommandRouter {
 
     @PostConstruct
     private void registerBuiltinCommands() {
-        builtinCommands.put("new", (args, ctx) -> CommandResult.success("已创建新会话"));
-        builtinCommands.put("stop", (args, ctx) -> CommandResult.success("已停止当前生成"));
+        builtinCommands.put("new", (args, ctx) -> stopAndAdvise(ctx, "new"));
+        builtinCommands.put("stop", (args, ctx) -> stopAndAdvise(ctx, "stop"));
         builtinCommands.put("help", (args, ctx) -> CommandResult.success("""
                 可用指令：
                 /new - 创建新会话
@@ -68,6 +70,22 @@ public class CommandRouter {
         });
         builtinCommands.put("commands", (args, ctx) -> CommandResult.success(listAllCommands()));
         builtinCommands.put("context", (args, ctx) -> handleContextCommand(ctx));
+    }
+
+    /**
+     * /stop、/new（#54）：真正停止当前会话的运行与待审批；
+     * 新话题由客户端换 sessionId 开启（chat API 对未存在的sessionId自动建会话）
+     */
+    private CommandResult stopAndAdvise(CommandContext ctx, String command) {
+        if (ctx == null || ctx.sessionId() == null || ctx.sessionId().isBlank()) {
+            return CommandResult.success("/" + command + " 需要会话上下文，请在会话内使用");
+        }
+        boolean hadRunning = chatStopService.stopRun(ctx.sessionId(), "用户发起 /" + command);
+        String head = hadRunning ? "已停止正在进行的生成与待审批" : "当前没有进行中的生成";
+        String tail = "new".equals(command)
+                ? "；开始新会话请换一个新的 sessionId 后直接发消息"
+                : "；继续对话直接发送新消息";
+        return CommandResult.success(head + tail);
     }
 
     /**
