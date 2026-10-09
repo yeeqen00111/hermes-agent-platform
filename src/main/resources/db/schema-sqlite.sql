@@ -902,3 +902,28 @@ CREATE TABLE IF NOT EXISTS ai_biz_metric_sample (
 );
 
 CREATE INDEX IF NOT EXISTS idx_biz_metric_sample_code ON ai_biz_metric_sample(metric_code);
+
+-- ============================================
+-- 业务层 · 智能运维：【AI】智能告警报表
+-- 发送频率 / 发送内容 / 提示词 / 发送通道
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_alert_report (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    frequency_hours INT DEFAULT 2,
+    scope VARCHAR(500),
+    prompt TEXT,
+    channel_code VARCHAR(64),
+    recipient VARCHAR(256),
+    last_send_time DATETIME,
+    last_content TEXT,
+    enabled TINYINT DEFAULT 1,
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);

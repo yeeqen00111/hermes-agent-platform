@@ -24,6 +24,7 @@ import AlertMonitorView from '@/views/ops/AlertMonitorView.vue'
 import AlertSendLogView from '@/views/ops/AlertSendLogView.vue'
 import LogCleanView from '@/views/ops/LogCleanView.vue'
 import MetricMonitorView from '@/views/ops/MetricMonitorView.vue'
+import AlertReportView from '@/views/ops/AlertReportView.vue'
 import { navGroups } from '@/nav'
 
 const realComponents: Record<string, unknown> = {
@@ -41,6 +42,7 @@ const realComponents: Record<string, unknown> = {
   '/ops/alert-send-log': AlertSendLogView,
   '/ops/log-clean': LogCleanView,
   '/ops/metric-monitor': MetricMonitorView,
+  '/ops/alert-report': AlertReportView,
   '/admin/agent/profiles': AgentProfilesView,
   '/admin/agent/skills': SkillsView,
   '/admin/agent/channels': ChannelsView,

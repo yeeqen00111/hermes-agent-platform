@@ -883,3 +883,29 @@ CREATE TABLE IF NOT EXISTS ai_biz_metric_sample (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间',
     INDEX idx_biz_metric_sample_code (metric_code)
 ) ENGINE=InnoDB COMMENT='业务指标采样';
+
+-- ============================================
+-- 业务层 · 智能运维：【AI】智能告警报表
+-- 发送频率 / 发送内容 / 提示词 / 发送通道
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_alert_report (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '报表编码',
+    name VARCHAR(128) NOT NULL COMMENT '报表名称',
+    frequency_hours INT DEFAULT 2 COMMENT '发送频率（小时，默认 2）',
+    scope VARCHAR(500) COMMENT '发送内容范围 JSON：projectName/alertType/level/lookbackHours',
+    prompt TEXT COMMENT '提示词',
+    channel_code VARCHAR(64) COMMENT '发送通道',
+    recipient VARCHAR(256) COMMENT '接收人',
+    last_send_time DATETIME COMMENT '上次发送时间',
+    last_content TEXT COMMENT '最近一次生成的报表正文（markdown）',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_alert_report_code (code)
+) ENGINE=InnoDB COMMENT='【AI】智能告警报表配置（智能运维）';
