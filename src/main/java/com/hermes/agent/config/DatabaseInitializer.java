@@ -55,6 +55,8 @@ public class DatabaseInitializer implements ApplicationRunner {
      */
     private void preClean(Connection connection) {
         String[] statements = {
+                "ALTER TABLE ai_model ADD COLUMN display_name VARCHAR(64)",
+                "ALTER TABLE ai_model ADD COLUMN tier VARCHAR(16)",
                 "DELETE FROM ai_agent_context_file WHERE del_flag <> 0",
                 "DELETE FROM ai_agent_context_file WHERE id NOT IN "
                         + "(SELECT MIN(id) FROM ai_agent_context_file GROUP BY scope, agent_code, file_type)",
@@ -91,8 +93,7 @@ public class DatabaseInitializer implements ApplicationRunner {
                 "ALTER TABLE ai_agent_profile ADD COLUMN gray_ratio INT DEFAULT 0",
                 "ALTER TABLE ai_channel ADD COLUMN config TEXT",
                 // 模型档位映射（白板：DeepSeek Pro / DeepSeek Flash / GLM）
-                "ALTER TABLE ai_model ADD COLUMN display_name VARCHAR(64)",
-                "ALTER TABLE ai_model ADD COLUMN tier VARCHAR(16)",
+                // 注：列已在 preClean 中补齐（必须先于含新列的种子执行），此处只回填老库数据
                 "UPDATE ai_model SET display_name='DeepSeek Flash', tier='FLASH' WHERE provider_code='deepseek' "
                         + "AND model_name='deepseek-chat' AND (display_name IS NULL OR display_name='')",
                 "UPDATE ai_model SET display_name='DeepSeek Pro', tier='PRO' WHERE provider_code='deepseek' "
