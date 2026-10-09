@@ -122,6 +122,9 @@ public class KnowledgeService {
     /** 上传内容转 markdown：md/txt 直存、html 转文本、csv 转表格、其余入代码块 */
     public String toMarkdown(String filename, byte[] bytes) {
         String text = bytes == null ? "" : new String(bytes, StandardCharsets.UTF_8);
+        if (text.startsWith("\uFEFF")) {
+            text = text.substring(1); // 去 UTF-8 BOM
+        }
         String ext = extension(filename);
         return switch (ext) {
             case "md", "markdown", "txt" -> text;

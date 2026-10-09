@@ -120,6 +120,12 @@ class KnowledgeServiceTest {
     }
 
     @Test
+    void uploadStripsUtf8Bom() {
+        byte[] bytes = "\uFEFF# 标题".getBytes(StandardCharsets.UTF_8);
+        assertThat(service.toMarkdown("doc.md", bytes)).isEqualTo("# 标题");
+    }
+
+    @Test
     void uploadHtmlStrippedToText() {
         byte[] bytes = "<html><body><h1>标题</h1><p>第一段</p><script>x()</script></body></html>"
                 .getBytes(StandardCharsets.UTF_8);
