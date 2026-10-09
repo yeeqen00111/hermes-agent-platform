@@ -25,6 +25,9 @@ public class PersonaPack {
 
     private List<String> memoryBlocks;
 
+    /** 运维经验（自进化沉淀）块 */
+    private List<String> experienceBlocks;
+
     private String userProfile;
 
     /** 组装后的系统提示 */

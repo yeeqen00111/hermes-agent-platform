@@ -11,6 +11,7 @@ import com.hermes.agent.mapper.AgentProfileMapper;
 import com.hermes.agent.mapper.AgentVersionMapper;
 import com.hermes.agent.mapper.AiChatSessionMapper;
 import com.hermes.agent.skill.SkillRegistry;
+import com.hermes.agent.service.OpsEvolutionService;
 import org.apache.ibatis.session.LocalCacheScope;
 import org.apache.ibatis.session.SqlSession;
 import org.junit.jupiter.api.AfterEach;
@@ -71,9 +72,11 @@ class PersonaAssemblerTest {
         when(userProfileService.get(any())).thenReturn(null);
         SkillRegistry skillRegistry = mock(SkillRegistry.class);
         when(skillRegistry.indexBlock(any())).thenReturn("");
+        OpsEvolutionService opsEvolutionService = mock(OpsEvolutionService.class);
+        when(opsEvolutionService.experienceBlocks(any(), anyInt())).thenReturn(List.of());
 
         assembler = new PersonaAssembler(profileMapper, contextFileMapper, sessionMapper, versionService,
-                memoryService, userProfileService, skillRegistry, objectMapper);
+                memoryService, userProfileService, skillRegistry, objectMapper, opsEvolutionService);
     }
 
     @AfterEach

@@ -957,3 +957,36 @@ CREATE TABLE IF NOT EXISTS ai_kb_node (
     UNIQUE KEY uk_kb_node_code (code),
     INDEX idx_kb_node_parent (parent_id)
 ) ENGINE=InnoDB COMMENT='运维知识库节点（目录/文档）';
+
+-- ============================================
+-- Agent 层 · 运维智能体「自我进化」：经验库（问题 → 解决方案）闭环
+-- 记录 → 检索复用 → 反馈强化/衰减 → 定时巩固淘汰
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_ops_experience (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    exp_code VARCHAR(64) NOT NULL COMMENT '经验编码',
+    agent_code VARCHAR(64) COMMENT '所属智能体',
+    problem VARCHAR(1000) NOT NULL COMMENT '问题/症状',
+    problem_key VARCHAR(160) NOT NULL COMMENT '问题指纹（去重归并用）',
+    cause VARCHAR(1000) COMMENT '原因',
+    solution TEXT COMMENT '处置方案',
+    tags VARCHAR(500) COMMENT '标签（逗号分隔）',
+    system_name VARCHAR(128) COMMENT '所属系统',
+    source_type VARCHAR(32) COMMENT 'ALERT / CHAT / MANUAL / KB',
+    source_ref VARCHAR(128) COMMENT '来源引用',
+    hits INT DEFAULT 0 COMMENT '复用次数',
+    success_count INT DEFAULT 0 COMMENT '有效反馈数',
+    fail_count INT DEFAULT 0 COMMENT '无效反馈数',
+    confidence DOUBLE DEFAULT 0.5 COMMENT '置信度 0~1',
+    status VARCHAR(32) DEFAULT 'ACTIVE' COMMENT 'ACTIVE / DEPRECATED',
+    last_used_time DATETIME COMMENT '最近复用时间',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_ops_exp_code (exp_code),
+    INDEX idx_ops_exp_key (agent_code, problem_key),
+    INDEX idx_ops_exp_status (status)
+) ENGINE=InnoDB COMMENT='运维经验库（自我进化）';

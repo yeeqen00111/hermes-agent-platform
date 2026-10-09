@@ -26,6 +26,7 @@ import LogCleanView from '@/views/ops/LogCleanView.vue'
 import MetricMonitorView from '@/views/ops/MetricMonitorView.vue'
 import AlertReportView from '@/views/ops/AlertReportView.vue'
 import OpsAuthorizeView from '@/views/ops/OpsAuthorizeView.vue'
+import OpsEvolutionView from '@/views/ops/OpsEvolutionView.vue'
 import KnowledgeView from '@/views/KnowledgeView.vue'
 import PlatformConfigView from '@/views/admin/PlatformConfigView.vue'
 import CommandsView from '@/views/admin/CommandsView.vue'
@@ -48,6 +49,7 @@ const realComponents: Record<string, unknown> = {
   '/ops/metric-monitor': MetricMonitorView,
   '/ops/alert-report': AlertReportView,
   '/ops/authorize': OpsAuthorizeView,
+  '/ops/evolution': OpsEvolutionView,
   '/knowledge': KnowledgeView,
   '/admin/agent/profiles': AgentProfilesView,
   '/admin/agent/skills': SkillsView,

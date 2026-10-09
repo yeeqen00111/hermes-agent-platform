@@ -10,6 +10,7 @@ import com.hermes.agent.entity.AgentUserProfile;
 import com.hermes.agent.entity.AiChatSession;
 import com.hermes.agent.mapper.AgentContextFileMapper;
 import com.hermes.agent.mapper.AgentProfileMapper;
+import com.hermes.agent.service.OpsEvolutionService;
 import com.hermes.agent.mapper.AiChatSessionMapper;
 import com.hermes.agent.skill.SkillRegistry;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ public class PersonaAssembler {
     private final UserProfileService userProfileService;
     private final SkillRegistry skillRegistry;
     private final ObjectMapper objectMapper;
+    private final OpsEvolutionService opsEvolutionService;
 
     public AgentProfile loadProfile(String agentCode) {
         String code = (agentCode == null || agentCode.isBlank()) ? "assistant" : agentCode;
@@ -78,10 +80,23 @@ public class PersonaAssembler {
                 .memoryBlocks(memories.stream()
                         .map(m -> "- " + m.getMemoryKey() + ": " + m.getContent())
                         .collect(Collectors.toList()))
+                .experienceBlocks(safeExperiences(profile.getAgentCode()))
                 .userProfile(user == null ? null : user.getProfileText())
                 .build();
         pack.setSystemPrompt(renderSystemPrompt(pack));
         return pack;
+    }
+
+    /**
+     * 运维经验注入（自进化）：取该 Agent 置信度最高的经验，供模型命中相似问题时参考。
+     * 读取失败（如库未建表）不影响主流程。
+     */
+    private List<String> safeExperiences(String agentCode) {
+        try {
+            return opsEvolutionService.experienceBlocks(agentCode, 5);
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     private String renderSystemPrompt(PersonaPack pack) {
@@ -100,6 +115,10 @@ public class PersonaAssembler {
         }
         if (pack.getMemoryBlocks() != null && !pack.getMemoryBlocks().isEmpty()) {
             sb.append("\n\n## 记忆\n").append(String.join("\n", pack.getMemoryBlocks()));
+        }
+        if (pack.getExperienceBlocks() != null && !pack.getExperienceBlocks().isEmpty()) {
+            sb.append("\n\n## 运维经验（自进化沉淀）\n命中相似问题时优先参考以下已验证方案：\n")
+                    .append(String.join("\n", pack.getExperienceBlocks()));
         }
         if (pack.getUserProfile() != null && !pack.getUserProfile().isBlank()) {
             sb.append("\n\n## 当前用户\n").append(pack.getUserProfile().trim());

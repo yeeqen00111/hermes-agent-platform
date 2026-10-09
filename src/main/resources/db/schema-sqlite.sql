@@ -975,3 +975,36 @@ CREATE TABLE IF NOT EXISTS ai_kb_node (
 );
 
 CREATE INDEX IF NOT EXISTS idx_kb_node_parent ON ai_kb_node(parent_id);
+
+-- ============================================
+-- Agent 层 · 运维智能体「自我进化」：经验库（问题 → 解决方案）闭环
+-- 记录 → 检索复用 → 反馈强化/衰减 → 定时巩固淘汰
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_ops_experience (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exp_code VARCHAR(64) NOT NULL UNIQUE,
+    agent_code VARCHAR(64),
+    problem VARCHAR(1000) NOT NULL,
+    problem_key VARCHAR(160) NOT NULL,
+    cause VARCHAR(1000),
+    solution TEXT,
+    tags VARCHAR(500),
+    system_name VARCHAR(128),
+    source_type VARCHAR(32),
+    source_ref VARCHAR(128),
+    hits INT DEFAULT 0,
+    success_count INT DEFAULT 0,
+    fail_count INT DEFAULT 0,
+    confidence DOUBLE DEFAULT 0.5,
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    last_used_time DATETIME,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ops_exp_key ON ai_ops_experience(agent_code, problem_key);
+CREATE INDEX IF NOT EXISTS idx_ops_exp_status ON ai_ops_experience(status);

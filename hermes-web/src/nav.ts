@@ -60,6 +60,7 @@ export const navGroups: NavGroup[] = [
       { path: '/ops/metric-monitor', title: '业务指标监控' },
       { path: '/ops/authorize', title: '【AI】智能运维授权' },
       { path: '/ops/log-clean', title: '日志清理（3/7/7 天）' },
+      { path: '/ops/evolution', title: '运维经验库（自进化）' },
       { path: '/knowledge', title: '运维知识库' },
     ],
   },
