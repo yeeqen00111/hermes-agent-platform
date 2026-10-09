@@ -15,7 +15,6 @@ const HINTS: Record<string, string> = {
   '/admin/agent/plugins': '补充项（用户指定保留）：插件机制，当前无实现。',
   '/qa': '迁移项：智能问数数据面（database.metric.query 语义层）由 Java 平台提供，本平台只做人格包 + 执行器。',
   '/report/smart': '迁移项：智能报表·千人千面基于控制塔接口（白板注「已完成-待迁移」）。',
-  '/knowledge': '本平台实现中：运维知识库（目录层级 markdown 编辑器 / 上传转 markdown）。',
 }
 
 const hint = computed(() => HINTS[route.path] ?? '本模块按白板逐屏实现中。')

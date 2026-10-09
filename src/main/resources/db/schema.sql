@@ -933,3 +933,27 @@ CREATE TABLE IF NOT EXISTS ai_ops_grant (
     UNIQUE KEY uk_ops_grant_code (code),
     INDEX idx_ops_grant_agent (agent_code)
 ) ENGINE=InnoDB COMMENT='【AI】智能运维授权（运维助手可见范围）';
+
+-- ============================================
+-- 业务层 · 智能运维：运维知识库（目录层级 markdown + 上传转 markdown）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_kb_node (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '节点编码',
+    name VARCHAR(256) NOT NULL COMMENT '节点名称',
+    parent_id BIGINT DEFAULT 0 COMMENT '父节点ID（0=根）',
+    node_type VARCHAR(16) NOT NULL COMMENT 'FOLDER（目录）/ DOC（文档）',
+    title VARCHAR(256) COMMENT '文档标题',
+    content TEXT COMMENT 'markdown 正文',
+    sort_no INT DEFAULT 0 COMMENT '排序',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_kb_node_code (code),
+    INDEX idx_kb_node_parent (parent_id)
+) ENGINE=InnoDB COMMENT='运维知识库节点（目录/文档）';

@@ -951,3 +951,27 @@ CREATE TABLE IF NOT EXISTS ai_ops_grant (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ops_grant_agent ON ai_ops_grant(agent_code);
+
+-- ============================================
+-- 业务层 · 智能运维：运维知识库（目录层级 markdown + 上传转 markdown）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_kb_node (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(256) NOT NULL,
+    parent_id BIGINT DEFAULT 0,
+    node_type VARCHAR(16) NOT NULL,
+    title VARCHAR(256),
+    content TEXT,
+    sort_no INT DEFAULT 0,
+    enabled TINYINT DEFAULT 1,
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_kb_node_parent ON ai_kb_node(parent_id);
