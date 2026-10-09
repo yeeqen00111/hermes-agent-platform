@@ -16,7 +16,7 @@
 执行模式（`execution_mode`）：
 - `LLM_DRIVEN`：ReAct 循环（模型可发起 ```tool_call``` 围栏调用工具，最多4轮）
 - `FIXED_FLOW`：确定性步骤编排（`flow_definition`，步骤类型 TOOL/LLM），每步落库
-  `ai_flow_step_log`（状态/耗时/上下游/错误原因），供看板监控与告警
+  `ai_flow_step_log`（状态/耗时/上下游/错误原因）
 
 触发方式（`trigger_type`）：CHAT / API / SCHEDULED / WEBHOOK。
 代码评审身份 `code-reviewer` 为 API+WEBHOOK+SCHEDULED 触发，不直接面向用户对话。

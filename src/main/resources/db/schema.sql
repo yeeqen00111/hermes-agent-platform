@@ -846,3 +846,40 @@ INSERT IGNORE INTO ai_log_retention (data_type, retention_days, enabled, remark)
 ('FULL', 3, 1, '全量日志保留 3 天'),
 ('ALERT', 7, 1, '告警日志保留 7 天'),
 ('PROMOTE', 7, 1, '提级告警日志保留 7 天');
+
+-- ============================================
+-- 业务层 · 智能运维：业务指标监控（业务指标埋点 / 所属系统 / 指标类型）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_biz_metric (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '指标编码',
+    name VARCHAR(128) NOT NULL COMMENT '指标名称',
+    metric_point VARCHAR(256) COMMENT '业务指标埋点',
+    system_name VARCHAR(128) COMMENT '所属系统',
+    metric_type VARCHAR(64) COMMENT '指标类型',
+    unit VARCHAR(32) COMMENT '单位',
+    source_ref VARCHAR(256) COMMENT '取数引用（埋点 key / SQL / 接口）',
+    threshold_op VARCHAR(8) COMMENT '阈值运算符 > >= < <= ==',
+    threshold_value DOUBLE COMMENT '阈值',
+    channel_code VARCHAR(64) COMMENT '告警去向通道',
+    recipient VARCHAR(256) COMMENT '接收人',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_biz_metric_code (code)
+) ENGINE=InnoDB COMMENT='业务指标监控（智能运维）';
+
+CREATE TABLE IF NOT EXISTS ai_biz_metric_sample (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    metric_code VARCHAR(64) NOT NULL COMMENT '指标编码',
+    metric_value DOUBLE COMMENT '采样值',
+    breached TINYINT DEFAULT 0 COMMENT '是否命中阈值',
+    sample_time DATETIME COMMENT '采样时间',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间',
+    INDEX idx_biz_metric_sample_code (metric_code)
+) ENGINE=InnoDB COMMENT='业务指标采样';

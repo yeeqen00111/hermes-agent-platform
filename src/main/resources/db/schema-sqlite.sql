@@ -865,3 +865,40 @@ INSERT OR IGNORE INTO ai_log_retention (data_type, retention_days, enabled, rema
 ('FULL', 3, 1, '全量日志保留 3 天'),
 ('ALERT', 7, 1, '告警日志保留 7 天'),
 ('PROMOTE', 7, 1, '提级告警日志保留 7 天');
+
+-- ============================================
+-- 业务层 · 智能运维：业务指标监控（业务指标埋点 / 所属系统 / 指标类型）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_biz_metric (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    metric_point VARCHAR(256),
+    system_name VARCHAR(128),
+    metric_type VARCHAR(64),
+    unit VARCHAR(32),
+    source_ref VARCHAR(256),
+    threshold_op VARCHAR(8),
+    threshold_value DOUBLE,
+    channel_code VARCHAR(64),
+    recipient VARCHAR(256),
+    enabled TINYINT DEFAULT 1,
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_biz_metric_sample (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    metric_code VARCHAR(64) NOT NULL,
+    metric_value DOUBLE,
+    breached TINYINT DEFAULT 0,
+    sample_time DATETIME,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_biz_metric_sample_code ON ai_biz_metric_sample(metric_code);
