@@ -10,6 +10,8 @@ interface Channel {
   name: string
   appId?: string
   appSecretRef?: string
+  /** 渠道扩展配置 JSON（钉钉/企微 agentId 等） */
+  config?: string
   enabled: number
   status?: string
   errorMessage?: string
@@ -39,7 +41,7 @@ async function load() {
 }
 
 function openCreate() {
-  Object.assign(form, { id: undefined, channelCode: '', channelType: 'feishu', name: '', appId: '', appSecretRef: '', enabled: 1 })
+  Object.assign(form, { id: undefined, channelCode: '', channelType: 'feishu', name: '', appId: '', appSecretRef: '', config: '', enabled: 1 })
   dialogVisible.value = true
 }
 
@@ -126,6 +128,14 @@ onMounted(load)
         <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="AppId"><el-input v-model="form.appId" /></el-form-item>
         <el-form-item label="密钥引用"><el-input v-model="form.appSecretRef" placeholder="环境变量名（不存明文）" /></el-form-item>
+        <el-form-item label="扩展配置">
+          <el-input
+            v-model="form.config"
+            type="textarea"
+            :rows="2"
+            placeholder='JSON，如钉钉/企微 {"agentId":"123"}'
+          />
+        </el-form-item>
         <el-form-item label="启用"><el-switch v-model="form.enabled" :active-value="1" :inactive-value="0" /></el-form-item>
       </el-form>
       <template #footer>

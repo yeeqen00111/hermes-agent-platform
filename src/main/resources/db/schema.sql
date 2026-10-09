@@ -72,7 +72,8 @@ CREATE TABLE ai_agent_context_file (
     create_by VARCHAR(64) COMMENT '创建人',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_by VARCHAR(64) COMMENT '更新人',
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_ctx_scope_agent_type (scope, agent_code, file_type)
 ) ENGINE=InnoDB COMMENT='Agent上下文文件表';
 
 -- ============================================
@@ -179,6 +180,7 @@ CREATE TABLE ai_channel (
     name VARCHAR(128) NOT NULL COMMENT '渠道名称',
     app_id VARCHAR(128) COMMENT '应用ID',
     app_secret_ref VARCHAR(128) COMMENT '应用密钥引用',
+    config TEXT COMMENT '渠道扩展配置 JSON（钉钉/企微 agentId 等）',
     enabled TINYINT DEFAULT 1 COMMENT '是否启用',
     status VARCHAR(32) DEFAULT 'DISCONNECTED' COMMENT '连接状态: CONNECTED/CONNECTING/FAILED/DISCONNECTED',
     error_message VARCHAR(500) COMMENT '错误消息',

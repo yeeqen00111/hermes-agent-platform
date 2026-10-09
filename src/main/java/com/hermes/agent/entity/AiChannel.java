@@ -27,6 +27,9 @@ public class AiChannel extends BaseEntity {
     /** 环境变量名/密钥管理器键，不存明文 */
     private String appSecretRef;
 
+    /** 渠道扩展配置 JSON（钉钉/企微 agentId 等） */
+    private String config;
+
     private Integer enabled;
 
     /** CONNECTED / CONNECTING / FAILED / DISCONNECTED */

@@ -64,7 +64,13 @@ public class DatabaseInitializer implements ApplicationRunner {
                 "ALTER TABLE ai_channel ADD COLUMN update_by VARCHAR(64)",
                 "ALTER TABLE ai_chat_session ADD COLUMN model_override VARCHAR(128)",
                 "ALTER TABLE ai_agent_profile ADD COLUMN gray_version INT",
-                "ALTER TABLE ai_agent_profile ADD COLUMN gray_ratio INT DEFAULT 0"
+                "ALTER TABLE ai_agent_profile ADD COLUMN gray_ratio INT DEFAULT 0",
+                // 身份文件去重：历史库因种子 INSERT OR IGNORE 无唯一约束而重复累积，先归并再建唯一索引
+                "DELETE FROM ai_agent_context_file WHERE id NOT IN "
+                        + "(SELECT MIN(id) FROM ai_agent_context_file GROUP BY scope, agent_code, file_type)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS uk_agent_context_scope_agent_type "
+                        + "ON ai_agent_context_file(scope, agent_code, file_type)",
+                "ALTER TABLE ai_channel ADD COLUMN config TEXT"
         };
         for (String sql : migrations) {
             try (var stmt = connection.createStatement()) {

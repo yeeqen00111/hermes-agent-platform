@@ -190,7 +190,7 @@ public class PersonaAssembler {
         files.addAll(contextFileMapper.selectList(new LambdaQueryWrapper<AgentContextFile>()
                 .eq(AgentContextFile::getFileType, fileType)
                 .eq(AgentContextFile::getScope, "GLOBAL")));
-        return files.stream().map(AgentContextFile::getContent).collect(Collectors.joining("\n"));
+        return files.stream().map(AgentContextFile::getContent).distinct().collect(Collectors.joining("\n"));
     }
 
     private int injectTopK(AgentProfile profile) {

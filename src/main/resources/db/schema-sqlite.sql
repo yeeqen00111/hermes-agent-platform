@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS ai_channel (
     name VARCHAR(128) NOT NULL,
     app_id VARCHAR(128),
     app_secret_ref VARCHAR(128),
+    config TEXT,
     enabled TINYINT DEFAULT 1,
     status VARCHAR(32) DEFAULT 'DISCONNECTED',
     error_message VARCHAR(500),
