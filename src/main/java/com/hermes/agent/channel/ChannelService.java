@@ -84,7 +84,7 @@ public class ChannelService {
     }
 
     /** 心跳超时（2 分钟）自动置为 DISCONNECTED */
-    @Scheduled(fixedDelay = 60000)
+    @Scheduled(fixedDelay = 60000, initialDelay = 60000)
     public void sweepStaleConnections() {
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(2);
         List<AiChannel> stale = channelMapper.selectList(new LambdaQueryWrapper<AiChannel>()

@@ -34,6 +34,7 @@ public class DatabaseInitializer implements ApplicationRunner {
             log.info("检测到SQLite，执行自动建表...");
             try (Connection connection = dataSource.getConnection()) {
                 ClassPathResource resource = new ClassPathResource("db/schema-sqlite.sql");
+                preClean(connection);
                 ScriptUtils.executeSqlScript(connection, resource);
                 migrate(connection);
                 log.info("SQLite数据库表初始化完成");
@@ -43,6 +44,29 @@ public class DatabaseInitializer implements ApplicationRunner {
             }
         } else {
             log.info("非SQLite数据库，跳过自动建表（请手动执行schema.sql）");
+        }
+    }
+
+    /**
+     * 建表/种子之前的清理（历史库修正，全新库无副作用、语句失败即忽略）：
+     * 身份文件曾被种子重复插入，且软删行会与唯一索引下的补插冲突 →
+     * 先物理清除软删行、再按 (scope, agent_code, file_type) 归并，最后建唯一索引，
+     * 使随后的种子 INSERT OR IGNORE 真正幂等且能补回缺失行。
+     */
+    private void preClean(Connection connection) {
+        String[] statements = {
+                "DELETE FROM ai_agent_context_file WHERE del_flag <> 0",
+                "DELETE FROM ai_agent_context_file WHERE id NOT IN "
+                        + "(SELECT MIN(id) FROM ai_agent_context_file GROUP BY scope, agent_code, file_type)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS uk_agent_context_scope_agent_type "
+                        + "ON ai_agent_context_file(scope, agent_code, file_type)"
+        };
+        for (String sql : statements) {
+            try (var stmt = connection.createStatement()) {
+                stmt.execute(sql);
+            } catch (java.sql.SQLException e) {
+                log.debug("预清理语句跳过（表未建或已处理）: {}", e.getMessage());
+            }
         }
     }
 
@@ -65,11 +89,6 @@ public class DatabaseInitializer implements ApplicationRunner {
                 "ALTER TABLE ai_chat_session ADD COLUMN model_override VARCHAR(128)",
                 "ALTER TABLE ai_agent_profile ADD COLUMN gray_version INT",
                 "ALTER TABLE ai_agent_profile ADD COLUMN gray_ratio INT DEFAULT 0",
-                // 身份文件去重：历史库因种子 INSERT OR IGNORE 无唯一约束而重复累积，先归并再建唯一索引
-                "DELETE FROM ai_agent_context_file WHERE id NOT IN "
-                        + "(SELECT MIN(id) FROM ai_agent_context_file GROUP BY scope, agent_code, file_type)",
-                "CREATE UNIQUE INDEX IF NOT EXISTS uk_agent_context_scope_agent_type "
-                        + "ON ai_agent_context_file(scope, agent_code, file_type)",
                 "ALTER TABLE ai_channel ADD COLUMN config TEXT"
         };
         for (String sql : migrations) {
