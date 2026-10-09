@@ -992,3 +992,64 @@ CREATE TABLE IF NOT EXISTS ai_ops_experience (
     INDEX idx_ops_exp_key (agent_code, problem_key),
     INDEX idx_ops_exp_status (status)
 ) ENGINE=InnoDB COMMENT='运维经验库（自我进化）';
+
+-- ============================================
+-- 系统层 · 用户/角色/菜单 + 租户管理
+-- 用户→角色沿用 sys_user.role_codes（逗号分隔）；角色→菜单用 sys_role_menu
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sys_role (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '角色编码',
+    name VARCHAR(128) NOT NULL COMMENT '角色名称',
+    description VARCHAR(500) COMMENT '描述',
+    status VARCHAR(32) DEFAULT 'ACTIVE' COMMENT 'ACTIVE/DISABLED',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_sys_role_code (code)
+) ENGINE=InnoDB COMMENT='角色';
+
+CREATE TABLE IF NOT EXISTS sys_menu (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '菜单编码',
+    name VARCHAR(128) NOT NULL COMMENT '菜单名称',
+    parent_id BIGINT DEFAULT 0 COMMENT '父菜单ID（0=根）',
+    path VARCHAR(256) COMMENT '前端路由路径',
+    icon VARCHAR(64) COMMENT '图标',
+    sort_no INT DEFAULT 0 COMMENT '排序',
+    status VARCHAR(32) DEFAULT 'ACTIVE' COMMENT 'ACTIVE/DISABLED',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_sys_menu_code (code)
+) ENGINE=InnoDB COMMENT='菜单';
+
+CREATE TABLE IF NOT EXISTS sys_role_menu (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    role_code VARCHAR(64) NOT NULL COMMENT '角色编码',
+    menu_code VARCHAR(64) NOT NULL COMMENT '菜单编码',
+    UNIQUE KEY uk_role_menu (role_code, menu_code)
+) ENGINE=InnoDB COMMENT='角色-菜单';
+
+CREATE TABLE IF NOT EXISTS sys_tenant (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '租户编码',
+    name VARCHAR(128) NOT NULL COMMENT '租户名称',
+    contact VARCHAR(128) COMMENT '联系人',
+    phone VARCHAR(64) COMMENT '联系电话',
+    status VARCHAR(32) DEFAULT 'ACTIVE' COMMENT 'ACTIVE/DISABLED',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_sys_tenant_code (code)
+) ENGINE=InnoDB COMMENT='租户';

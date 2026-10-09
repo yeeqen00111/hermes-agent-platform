@@ -30,6 +30,8 @@ import OpsEvolutionView from '@/views/ops/OpsEvolutionView.vue'
 import KnowledgeView from '@/views/KnowledgeView.vue'
 import PlatformConfigView from '@/views/admin/PlatformConfigView.vue'
 import CommandsView from '@/views/admin/CommandsView.vue'
+import RbacView from '@/views/admin/RbacView.vue'
+import TenantsView from '@/views/admin/TenantsView.vue'
 import { navGroups } from '@/nav'
 
 const realComponents: Record<string, unknown> = {
@@ -62,6 +64,8 @@ const realComponents: Record<string, unknown> = {
   '/admin/org/platform-config': PlatformConfigView,
   '/admin/org/iterations': IterationsView,
   '/admin/agent/commands': CommandsView,
+  '/admin/org/users': RbacView,
+  '/admin/org/tenant': TenantsView,
 }
 
 const children: RouteRecordRaw[] = []

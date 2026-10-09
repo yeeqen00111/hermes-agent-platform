@@ -1009,3 +1009,62 @@ CREATE TABLE IF NOT EXISTS ai_ops_experience (
 
 CREATE INDEX IF NOT EXISTS idx_ops_exp_key ON ai_ops_experience(agent_code, problem_key);
 CREATE INDEX IF NOT EXISTS idx_ops_exp_status ON ai_ops_experience(status);
+
+-- ============================================
+-- 系统层 · 用户/角色/菜单 + 租户管理
+-- 用户→角色沿用 sys_user.role_codes（逗号分隔）；角色→菜单用 sys_role_menu
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sys_role (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    description VARCHAR(500),
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sys_menu (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    parent_id BIGINT DEFAULT 0,
+    path VARCHAR(256),
+    icon VARCHAR(64),
+    sort_no INT DEFAULT 0,
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sys_role_menu (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role_code VARCHAR(64) NOT NULL,
+    menu_code VARCHAR(64) NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_role_menu ON sys_role_menu(role_code, menu_code);
+
+CREATE TABLE IF NOT EXISTS sys_tenant (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    contact VARCHAR(128),
+    phone VARCHAR(64),
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
