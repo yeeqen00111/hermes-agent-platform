@@ -36,6 +36,10 @@ hermes:
   security:
     # 服务间调用令牌
     service-token: ${SERVICE_TOKEN:change-me-in-production}
+  review:
+    gitlab:
+      # GitLab Webhook 密钥（校验 X-Gitlab-Token）；未配置则开发放行并告警
+      webhook-secret: ${GITLAB_WEBHOOK_SECRET:}
   tools:
     # 迁移项工具 mock 开关（仅开发联调；false 时未接通工具显式报 MIGRATION_PENDING，不返回假数据）
     mock: false

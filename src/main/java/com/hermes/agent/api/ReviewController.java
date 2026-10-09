@@ -11,6 +11,7 @@ import com.hermes.agent.mapper.CrRepositoryMapper;
 import com.hermes.agent.mapper.CrReviewIssueMapper;
 import com.hermes.agent.mapper.CrReviewRuleMapper;
 import com.hermes.agent.review.CredentialService;
+import com.hermes.agent.review.GitLabWebhookParser;
 import com.hermes.agent.review.GitService;
 import com.hermes.agent.review.ReviewParticipantService;
 import com.hermes.agent.review.ReviewPermissionService;
@@ -18,6 +19,8 @@ import com.hermes.agent.review.ReviewReportService;
 import com.hermes.agent.review.ReviewTaskService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,6 +29,7 @@ import java.util.Map;
 /**
  * 代码评审模块API：凭据/仓库/规则管理 + 任务触发 + Agent回传回调 + 复审闭环
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/review")
 @RequiredArgsConstructor
@@ -40,6 +44,11 @@ public class ReviewController {
     private final CrRepositoryMapper repositoryMapper;
     private final CrReviewRuleMapper ruleMapper;
     private final CrReviewIssueMapper issueMapper;
+    private final GitLabWebhookParser gitLabWebhookParser;
+
+    /** GitLab Webhook 密钥（可空：未配置则开发放行并告警） */
+    @Value("${hermes.review.gitlab.webhook-secret:}")
+    private String gitlabWebhookSecret;
 
     // ---------- 凭据管理 ----------
 
@@ -164,6 +173,32 @@ public class ReviewController {
         List<CrReviewTask> tasks = reviewTaskService.onWebhook(
                 payload.getRepoCode(), payload.getBranch(), payload.getRevision());
         return Map.of("success", true, "tasks", tasks);
+    }
+
+    /**
+     * GitLab Webhook（真实对接）：校验 X-Gitlab-Token，解析 Push / Merge Request 事件，
+     * 按 repoCode+branch 匹配 WEBHOOK 规则建评审任务。
+     */
+    @PostMapping("/webhook/gitlab")
+    public Map<String, Object> gitlabWebhook(@RequestBody(required = false) String body,
+                                             @RequestHeader(value = "X-Gitlab-Token", required = false) String token,
+                                             @RequestHeader(value = "X-Gitlab-Event", required = false) String event) {
+        if (!GitLabWebhookParser.tokenValid(token, gitlabWebhookSecret)) {
+            log.warn("GitLab Webhook 密钥校验失败（event={}）", event);
+            return Map.of("success", false, "errorCode", "WEBHOOK_TOKEN_INVALID");
+        }
+        if (gitlabWebhookSecret == null || gitlabWebhookSecret.isBlank()) {
+            log.warn("未配置 hermes.review.gitlab.webhook-secret，已放行 GitLab Webhook（开发联调）");
+        }
+        GitLabWebhookParser.Parsed parsed = gitLabWebhookParser.parse(body);
+        if (!parsed.accepted()) {
+            return Map.of("success", true, "handled", false,
+                    "reason", parsed.reason() == null ? "NOT_TRIGGERABLE" : parsed.reason());
+        }
+        List<CrReviewTask> tasks = reviewTaskService.onWebhook(parsed.repoCode(), parsed.branch(), parsed.revision());
+        return Map.of("success", true, "handled", true, "kind", parsed.kind(),
+                "repoCode", parsed.repoCode(), "branch", parsed.branch(),
+                "revision", parsed.revision(), "tasks", tasks);
     }
 
     // ---------- 评审问题闭环 ----------
