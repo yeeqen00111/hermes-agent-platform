@@ -28,6 +28,7 @@ import AlertReportView from '@/views/ops/AlertReportView.vue'
 import OpsAuthorizeView from '@/views/ops/OpsAuthorizeView.vue'
 import KnowledgeView from '@/views/KnowledgeView.vue'
 import PlatformConfigView from '@/views/admin/PlatformConfigView.vue'
+import CommandsView from '@/views/admin/CommandsView.vue'
 import { navGroups } from '@/nav'
 
 const realComponents: Record<string, unknown> = {
@@ -58,6 +59,7 @@ const realComponents: Record<string, unknown> = {
   '/admin/org/base-config': BaseConfigView,
   '/admin/org/platform-config': PlatformConfigView,
   '/admin/org/iterations': IterationsView,
+  '/admin/agent/commands': CommandsView,
 }
 
 const children: RouteRecordRaw[] = []
