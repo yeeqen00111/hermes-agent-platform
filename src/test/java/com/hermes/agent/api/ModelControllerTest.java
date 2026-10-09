@@ -45,7 +45,7 @@ class ModelControllerTest {
         factory.setConfiguration(configuration);
         sqlSession = factory.getObject().openSession(true);
         controller = new ModelController(sqlSession.getMapper(AiModelMapper.class),
-                sqlSession.getMapper(ModelProviderMapper.class));
+                sqlSession.getMapper(ModelProviderMapper.class), null);
 
         jdbc.update("DELETE FROM ai_model");
         jdbc.update("DELETE FROM ai_model_provider");

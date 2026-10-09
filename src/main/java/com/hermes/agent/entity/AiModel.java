@@ -20,6 +20,12 @@ public class AiModel {
 
     private String modelName;
 
+    /** 展示名（白板口径：DeepSeek Pro / DeepSeek Flash / GLM） */
+    private String displayName;
+
+    /** 档位：PRO / FLASH / STANDARD */
+    private String tier;
+
     private Integer contextWindow;
 
     private Integer supportsTools;

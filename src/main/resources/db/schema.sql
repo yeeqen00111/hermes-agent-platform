@@ -228,6 +228,8 @@ CREATE TABLE ai_model (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     provider_code VARCHAR(64) NOT NULL COMMENT '供应商编码',
     model_name VARCHAR(64) NOT NULL COMMENT '模型名称',
+    display_name VARCHAR(64) COMMENT '展示名（DeepSeek Pro / DeepSeek Flash / GLM）',
+    tier VARCHAR(16) COMMENT '档位: PRO/FLASH/STANDARD',
     context_window INT COMMENT '上下文窗口大小',
     supports_tools TINYINT DEFAULT 0 COMMENT '是否支持工具调用',
     enabled TINYINT DEFAULT 1 COMMENT '是否启用',
@@ -549,10 +551,10 @@ INSERT IGNORE INTO ai_model_provider (provider_code, name, base_url, api_key_ref
 ('deepseek', 'DeepSeek', 'https://api.deepseek.com', 'DEEPSEEK_API_KEY', 1),
 ('glm', '智谱GLM', 'https://open.bigmodel.cn/api/paas/v4', 'GLM_API_KEY', 1);
 
-INSERT IGNORE INTO ai_model (provider_code, model_name, context_window, supports_tools, enabled) VALUES
-('deepseek', 'deepseek-chat', 64000, 1, 1),
-('deepseek', 'deepseek-reasoner', 64000, 1, 1),
-('glm', 'glm-4-flash', 128000, 1, 1);
+INSERT IGNORE INTO ai_model (provider_code, model_name, display_name, tier, context_window, supports_tools, enabled) VALUES
+('deepseek', 'deepseek-chat', 'DeepSeek Flash', 'FLASH', 64000, 1, 1),
+('deepseek', 'deepseek-reasoner', 'DeepSeek Pro', 'PRO', 64000, 1, 1),
+('glm', 'glm-4-flash', 'GLM Flash', 'STANDARD', 128000, 1, 1);
 
 INSERT IGNORE INTO ai_agent_profile
 (agent_code, name, description, model_provider, model_name, execution_mode, trigger_type,

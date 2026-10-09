@@ -213,6 +213,8 @@ CREATE TABLE IF NOT EXISTS ai_model (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     provider_code VARCHAR(64) NOT NULL,
     model_name VARCHAR(64) NOT NULL,
+    display_name VARCHAR(64),
+    tier VARCHAR(16),
     context_window INT,
     supports_tools TINYINT DEFAULT 0,
     enabled TINYINT DEFAULT 1,
@@ -226,10 +228,10 @@ INSERT OR IGNORE INTO ai_model_provider (provider_code, name, base_url, api_key_
 ('deepseek', 'DeepSeek', 'https://api.deepseek.com', 'DEEPSEEK_API_KEY', 1),
 ('glm', '智谱GLM', 'https://open.bigmodel.cn/api/paas/v4', 'GLM_API_KEY', 1);
 
-INSERT OR IGNORE INTO ai_model (provider_code, model_name, context_window, supports_tools, enabled) VALUES
-('deepseek', 'deepseek-chat', 64000, 1, 1),
-('deepseek', 'deepseek-reasoner', 64000, 1, 1),
-('glm', 'glm-4-flash', 128000, 1, 1);
+INSERT OR IGNORE INTO ai_model (provider_code, model_name, display_name, tier, context_window, supports_tools, enabled) VALUES
+('deepseek', 'deepseek-chat', 'DeepSeek Flash', 'FLASH', 64000, 1, 1),
+('deepseek', 'deepseek-reasoner', 'DeepSeek Pro', 'PRO', 64000, 1, 1),
+('glm', 'glm-4-flash', 'GLM Flash', 'STANDARD', 128000, 1, 1);
 
 -- 会话表
 CREATE TABLE IF NOT EXISTS ai_chat_session (

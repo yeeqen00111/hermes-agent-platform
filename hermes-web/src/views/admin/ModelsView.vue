@@ -7,6 +7,8 @@ interface AiModel {
   id: number
   providerCode: string
   modelName: string
+  displayName?: string
+  tier?: string
   contextWindow?: number
   supportsTools?: number
   enabled?: number
@@ -56,6 +58,24 @@ function reset() {
   filters.includeDisabled = false
 }
 
+const verifyDialog = ref(false)
+const verifyResult = ref<{ ok: boolean; issues: string[]; tiers: { tier: string; providerCode: string; modelName: string; displayName?: string; contextWindow?: number }[] } | null>(null)
+
+async function runVerify() {
+  try {
+    const { data } = await http.get('/models/verify')
+    verifyResult.value = data
+    verifyDialog.value = true
+    if (data.ok) {
+      ElMessage.success('型号映射核验通过')
+    } else {
+      ElMessage.warning(`发现 ${(data.issues ?? []).length} 个问题`)
+    }
+  } catch (e) {
+    ElMessage.error('核验失败：' + (e as Error).message)
+  }
+}
+
 watch(filters, load)
 
 onMounted(load)
@@ -68,6 +88,7 @@ onMounted(load)
         <div class="head">
           <b>Agent · 模型</b>
           <span class="muted">契约 §3.5 <code>GET /api/models</code>（只读）；密钥只存引用（<code>api_key_ref</code> 为环境变量名），库中无明文</span>
+          <el-button size="small" @click="runVerify">型号映射核验</el-button>
           <el-button size="small" @click="load">刷新</el-button>
         </div>
       </template>
@@ -87,6 +108,12 @@ onMounted(load)
             <el-table-column prop="id" label="ID" width="70" />
             <el-table-column prop="providerCode" label="供应商" width="140" />
             <el-table-column prop="modelName" label="模型" min-width="200" />
+            <el-table-column prop="displayName" label="展示名" width="150" />
+            <el-table-column prop="tier" label="档位" width="110">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.tier === 'PRO' ? 'danger' : row.tier === 'FLASH' ? 'warning' : 'info'">{{ row.tier ?? '—' }}</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="contextWindow" label="上下文窗口" width="120" />
             <el-table-column label="工具调用" width="100">
               <template #default="{ row }">
@@ -118,6 +145,30 @@ onMounted(load)
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <el-dialog v-model="verifyDialog" title="大模型型号映射核验" width="720px">
+      <template v-if="verifyResult">
+        <p>
+          <el-tag :type="verifyResult.ok ? 'success' : 'danger'" size="small">{{ verifyResult.ok ? '通过' : '有问题' }}</el-tag>
+          <span class="muted">（DeepSeek Pro / DeepSeek Flash / GLM 档位映射与 Agent 引用一致性）</span>
+        </p>
+        <el-table :data="verifyResult.tiers" border stripe size="small" style="margin-bottom: 10px">
+          <el-table-column prop="tier" label="档位" width="110" />
+          <el-table-column prop="displayName" label="展示名" width="150" />
+          <el-table-column prop="providerCode" label="供应商" width="120" />
+          <el-table-column prop="modelName" label="模型" min-width="180" />
+          <el-table-column prop="contextWindow" label="窗口" width="100" />
+        </el-table>
+        <el-alert v-if="verifyResult.issues.length" type="warning" :closable="false" title="核验问题">
+          <ul class="issues">
+            <li v-for="(i, idx) in verifyResult.issues" :key="idx">{{ i }}</li>
+          </ul>
+        </el-alert>
+      </template>
+      <template #footer>
+        <el-button @click="verifyDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

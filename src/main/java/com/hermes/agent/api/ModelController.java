@@ -5,6 +5,7 @@ import com.hermes.agent.entity.AiModel;
 import com.hermes.agent.entity.ModelProvider;
 import com.hermes.agent.mapper.AiModelMapper;
 import com.hermes.agent.mapper.ModelProviderMapper;
+import com.hermes.agent.service.ModelCatalogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +26,7 @@ public class ModelController {
 
     private final AiModelMapper modelMapper;
     private final ModelProviderMapper providerMapper;
+    private final ModelCatalogService modelCatalogService;
 
     /**
      * 可用模型。契约要求「AI 回答必须用支持工具调用的模型」，故提供 {@code toolsOnly} 过滤。
@@ -49,6 +51,14 @@ public class ModelController {
         }
         q.orderByAsc(AiModel::getProviderCode).orderByAsc(AiModel::getModelName);
         return modelMapper.selectList(q);
+    }
+
+    /**
+     * 大模型型号映射核验（白板：DeepSeek Pro / DeepSeek Flash / GLM）。
+     */
+    @GetMapping("/models/verify")
+    public java.util.Map<String, Object> verify() {
+        return modelCatalogService.verify();
     }
 
     /**

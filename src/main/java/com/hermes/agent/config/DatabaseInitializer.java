@@ -89,7 +89,16 @@ public class DatabaseInitializer implements ApplicationRunner {
                 "ALTER TABLE ai_chat_session ADD COLUMN model_override VARCHAR(128)",
                 "ALTER TABLE ai_agent_profile ADD COLUMN gray_version INT",
                 "ALTER TABLE ai_agent_profile ADD COLUMN gray_ratio INT DEFAULT 0",
-                "ALTER TABLE ai_channel ADD COLUMN config TEXT"
+                "ALTER TABLE ai_channel ADD COLUMN config TEXT",
+                // 模型档位映射（白板：DeepSeek Pro / DeepSeek Flash / GLM）
+                "ALTER TABLE ai_model ADD COLUMN display_name VARCHAR(64)",
+                "ALTER TABLE ai_model ADD COLUMN tier VARCHAR(16)",
+                "UPDATE ai_model SET display_name='DeepSeek Flash', tier='FLASH' WHERE provider_code='deepseek' "
+                        + "AND model_name='deepseek-chat' AND (display_name IS NULL OR display_name='')",
+                "UPDATE ai_model SET display_name='DeepSeek Pro', tier='PRO' WHERE provider_code='deepseek' "
+                        + "AND model_name='deepseek-reasoner' AND (display_name IS NULL OR display_name='')",
+                "UPDATE ai_model SET display_name='GLM Flash', tier='STANDARD' WHERE provider_code='glm' "
+                        + "AND model_name='glm-4-flash' AND (display_name IS NULL OR display_name='')"
         };
         for (String sql : migrations) {
             try (var stmt = connection.createStatement()) {
