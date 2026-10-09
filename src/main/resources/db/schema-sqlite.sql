@@ -927,3 +927,27 @@ CREATE TABLE IF NOT EXISTS ai_alert_report (
     update_by VARCHAR(64),
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ============================================
+-- 业务层 · 智能运维：【AI】智能运维授权
+-- 代码仓库授权 / nacos配置授权 / 日志授权（运维助手可见范围）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_ops_grant (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    agent_code VARCHAR(64) NOT NULL,
+    grant_type VARCHAR(32) NOT NULL,
+    resource_ref VARCHAR(256),
+    permission VARCHAR(16) DEFAULT 'READ',
+    enabled TINYINT DEFAULT 1,
+    remark VARCHAR(500),
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ops_grant_agent ON ai_ops_grant(agent_code);

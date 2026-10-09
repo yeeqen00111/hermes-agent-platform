@@ -23,11 +23,18 @@ public class AlertReportJob {
     private final AlertReportMapper reportMapper;
     private final AlertReportService alertReportService;
 
-    @Scheduled(fixedDelay = 60000)
+    @Scheduled(fixedDelay = 60000, initialDelay = 60000)
     public void tick() {
         LocalDateTime now = LocalDateTime.now();
-        List<AlertReport> reports = reportMapper.selectList(new LambdaQueryWrapper<AlertReport>()
-                .eq(AlertReport::getEnabled, 1));
+        List<AlertReport> reports;
+        try {
+            reports = reportMapper.selectList(new LambdaQueryWrapper<AlertReport>()
+                    .eq(AlertReport::getEnabled, 1));
+        } catch (Exception e) {
+            // 首次任务可能与建表竞态，跳过本轮
+            log.debug("告警报表任务读取失败（可能建表未完成），本轮跳过: {}", e.getMessage());
+            return;
+        }
         for (AlertReport report : reports) {
             int hours = report.getFrequencyHours() == null ? 2 : Math.max(1, report.getFrequencyHours());
             boolean due = report.getLastSendTime() == null

@@ -13,7 +13,6 @@ const HINTS: Record<string, string> = {
   '/admin/org/platform-config': '平台日志 / 用量分析 / 数据看板——后端暂无独立管理端点（用量可从「工具调用审计」取数）；大模型配置见「Agent → 模型」。',
   '/admin/agent/commands': '指令（ai_command_bundle）经对话指令（/model、/bundle）生效，当前无 REST 管理端点。',
   '/admin/agent/plugins': '补充项（用户指定保留）：插件机制，当前无实现。',
-  '/ops/authorize': '本平台实现中：【AI】智能运维授权（代码仓库授权 / nacos 配置授权 / 日志授权）。',
   '/qa': '迁移项：智能问数数据面（database.metric.query 语义层）由 Java 平台提供，本平台只做人格包 + 执行器。',
   '/report/smart': '迁移项：智能报表·千人千面基于控制塔接口（白板注「已完成-待迁移」）。',
   '/knowledge': '本平台实现中：运维知识库（目录层级 markdown 编辑器 / 上传转 markdown）。',

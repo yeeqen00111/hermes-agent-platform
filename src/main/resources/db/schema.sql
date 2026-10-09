@@ -909,3 +909,27 @@ CREATE TABLE IF NOT EXISTS ai_alert_report (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_alert_report_code (code)
 ) ENGINE=InnoDB COMMENT='【AI】智能告警报表配置（智能运维）';
+
+-- ============================================
+-- 业务层 · 智能运维：【AI】智能运维授权
+-- 代码仓库授权 / nacos配置授权 / 日志授权（运维助手可见范围）
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_ops_grant (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(64) NOT NULL COMMENT '授权编码',
+    name VARCHAR(128) NOT NULL COMMENT '授权名称',
+    agent_code VARCHAR(64) NOT NULL COMMENT '被授权的智能体（运维助手）',
+    grant_type VARCHAR(32) NOT NULL COMMENT 'REPO（代码仓库）/ NACOS（nacos配置）/ LOG（日志）',
+    resource_ref VARCHAR(256) COMMENT '资源引用（仓库编码 / nacos服务器或配置分类 / 日志通道或系统）',
+    permission VARCHAR(16) DEFAULT 'READ' COMMENT 'READ / WRITE',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    remark VARCHAR(500) COMMENT '备注',
+    del_flag TINYINT DEFAULT 0 COMMENT '逻辑删除',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_ops_grant_code (code),
+    INDEX idx_ops_grant_agent (agent_code)
+) ENGINE=InnoDB COMMENT='【AI】智能运维授权（运维助手可见范围）';
