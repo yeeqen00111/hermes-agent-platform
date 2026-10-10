@@ -121,6 +121,50 @@ CREATE TABLE IF NOT EXISTS ai_command_bundle (
 
 CREATE INDEX IF NOT EXISTS idx_bundle_code ON ai_command_bundle(bundle_code);
 
+-- 插件表（补充项「插件」：自有进程内注册的能力包，非外部 ABI，见 agent-platform.md §插件 ABI）
+CREATE TABLE IF NOT EXISTS ai_plugin (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plugin_code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    version VARCHAR(32) DEFAULT '1.0.0',
+    plugin_type VARCHAR(32) DEFAULT 'CAPABILITY',
+    description VARCHAR(500),
+    manifest TEXT,
+    config TEXT,
+    enabled TINYINT DEFAULT 1,
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_plugin_code ON ai_plugin(plugin_code);
+
+-- 插件与智能体的绑定关系（绑定后才随身份包生效）
+CREATE TABLE IF NOT EXISTS ai_agent_plugin (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_code VARCHAR(64) NOT NULL,
+    plugin_code VARCHAR(64) NOT NULL,
+    enabled TINYINT DEFAULT 1,
+    del_flag TINYINT DEFAULT 0,
+    create_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_code, plugin_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_plugin_agent ON ai_agent_plugin(agent_code);
+
+-- 种子插件：内置能力包示例（ACTIVE 但未绑定任何智能体，故不影响运行时）
+INSERT OR IGNORE INTO ai_plugin (plugin_code, name, version, plugin_type, description, manifest, enabled, status) VALUES
+('ops-triage-pack', '运维分诊能力包', '1.0.0', 'CAPABILITY',
+ '日志/告警分诊：声明只读排查工具并给出处置约束，绑定后随身份包注入',
+ '{"tools":["log.search","alert.query"],"skills":[],"commands":[],"prompt":"处置日志与告警时：先按日志分级定位，再判断是否提级，最后给出可执行动作与验证方式。"}',
+ 1, 'ACTIVE');
+
 -- MCP 服务器配置表
 CREATE TABLE IF NOT EXISTS ai_mcp_server (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

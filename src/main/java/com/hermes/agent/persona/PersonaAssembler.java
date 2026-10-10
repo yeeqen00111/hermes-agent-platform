@@ -10,6 +10,7 @@ import com.hermes.agent.entity.AgentUserProfile;
 import com.hermes.agent.entity.AiChatSession;
 import com.hermes.agent.mapper.AgentContextFileMapper;
 import com.hermes.agent.mapper.AgentProfileMapper;
+import com.hermes.agent.plugin.PluginRegistry;
 import com.hermes.agent.service.OpsEvolutionService;
 import com.hermes.agent.mapper.AiChatSessionMapper;
 import com.hermes.agent.skill.SkillRegistry;
@@ -37,6 +38,7 @@ public class PersonaAssembler {
     private final SkillRegistry skillRegistry;
     private final ObjectMapper objectMapper;
     private final OpsEvolutionService opsEvolutionService;
+    private final PluginRegistry pluginRegistry;
 
     public AgentProfile loadProfile(String agentCode) {
         String code = (agentCode == null || agentCode.isBlank()) ? "assistant" : agentCode;
@@ -76,11 +78,12 @@ public class PersonaAssembler {
                 .profile(profile)
                 .soul(soul)
                 .agentsContext(agents)
-                .skillIndex(skillRegistry.indexBlock(enabledSkillCodes(profile)))
+                .skillIndex(skillRegistry.indexBlock(effectiveSkillCodes(profile)))
                 .memoryBlocks(memories.stream()
                         .map(m -> "- " + m.getMemoryKey() + ": " + m.getContent())
                         .collect(Collectors.toList()))
                 .experienceBlocks(safeExperiences(profile.getAgentCode()))
+                .pluginBlocks(safePluginPrompts(profile.getAgentCode()))
                 .userProfile(user == null ? null : user.getProfileText())
                 .build();
         pack.setSystemPrompt(renderSystemPrompt(pack));
@@ -99,6 +102,35 @@ public class PersonaAssembler {
         }
     }
 
+    /**
+     * 插件提示词注入（补充项「插件」）：绑定且启用的插件随身份包生效。读取失败不影响主流程。
+     */
+    private List<String> safePluginPrompts(String agentCode) {
+        try {
+            return pluginRegistry.promptBlocks(agentCode);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /**
+     * 技能索引白名单 = Agent 自身 enabledSkills ∪ 绑定插件声明的技能。
+     * enabledSkills 不配 = 全部可用（§8.1），此时插件不收窄范围，仍传空集合。
+     */
+    private List<String> effectiveSkillCodes(AgentProfile profile) {
+        List<String> own = enabledSkillCodes(profile);
+        if (own.isEmpty()) {
+            return List.of();
+        }
+        List<String> merged = new ArrayList<>(own);
+        try {
+            merged.addAll(pluginRegistry.skillCodesForAgent(profile.getAgentCode()));
+        } catch (Exception ignored) {
+            // 插件表不可用时按自身白名单
+        }
+        return merged.stream().distinct().collect(Collectors.toList());
+    }
+
     private String renderSystemPrompt(PersonaPack pack) {
         StringBuilder sb = new StringBuilder();
         if (pack.getSoul() != null && !pack.getSoul().isBlank()) {
@@ -112,6 +144,10 @@ public class PersonaAssembler {
         if (pack.getSkillIndex() != null && !pack.getSkillIndex().isBlank()) {
             sb.append("\n\n## 可用技能\n需要时用 skill.load 工具按技能名加载全文。\n")
                     .append(pack.getSkillIndex().trim());
+        }
+        if (pack.getPluginBlocks() != null && !pack.getPluginBlocks().isEmpty()) {
+            sb.append("\n\n## 插件能力\n以下能力由已启用的插件提供，按其约束执行：\n")
+                    .append(String.join("\n", pack.getPluginBlocks()));
         }
         if (pack.getMemoryBlocks() != null && !pack.getMemoryBlocks().isEmpty()) {
             sb.append("\n\n## 记忆\n").append(String.join("\n", pack.getMemoryBlocks()));

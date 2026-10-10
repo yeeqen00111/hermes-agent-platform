@@ -8,7 +8,6 @@ const group = computed(() => String(route.meta.group ?? ''))
 
 /** 占位屏的真实原因——如实标注，不糊弄（判据=后端有没有端点/权威在哪） */
 const HINTS: Record<string, string> = {
-  '/admin/agent/plugins': '补充项（用户指定保留）：插件机制，当前无实现。',
   '/qa': '迁移项：智能问数数据面（database.metric.query 语义层）由 Java 平台提供，本平台只做人格包 + 执行器。',
   '/report/smart': '迁移项：智能报表·千人千面基于控制塔接口（白板注「已完成-待迁移」）。',
 }

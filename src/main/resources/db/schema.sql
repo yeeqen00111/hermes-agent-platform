@@ -129,6 +129,41 @@ CREATE TABLE ai_command_bundle (
     INDEX idx_bundle_code (bundle_code)
 ) ENGINE=InnoDB COMMENT='指令捆绑包表';
 
+-- 插件表（补充项「插件」：自有进程内注册的能力包，非外部 ABI，见 agent-platform.md §插件 ABI）
+CREATE TABLE ai_plugin (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    plugin_code VARCHAR(64) NOT NULL UNIQUE COMMENT '插件编码',
+    name VARCHAR(128) NOT NULL COMMENT '插件名称',
+    version VARCHAR(32) DEFAULT '1.0.0' COMMENT '插件版本',
+    plugin_type VARCHAR(32) DEFAULT 'CAPABILITY' COMMENT '类型: CAPABILITY/PROMPT/CHANNEL',
+    description VARCHAR(500) COMMENT '描述',
+    manifest JSON COMMENT '能力清单 {tools:[],skills:[],commands:[],prompt:""}',
+    config JSON COMMENT '插件配置',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    status VARCHAR(32) DEFAULT 'ACTIVE' COMMENT '状态: ACTIVE/DISABLED',
+    del_flag TINYINT DEFAULT 0 COMMENT '删除标记',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_plugin_code (plugin_code)
+) ENGINE=InnoDB COMMENT='插件表';
+
+-- 插件与智能体的绑定关系（绑定后才随身份包生效）
+CREATE TABLE ai_agent_plugin (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    agent_code VARCHAR(64) NOT NULL COMMENT '智能体编码',
+    plugin_code VARCHAR(64) NOT NULL COMMENT '插件编码',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    del_flag TINYINT DEFAULT 0 COMMENT '删除标记',
+    create_by VARCHAR(64) COMMENT '创建人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_by VARCHAR(64) COMMENT '更新人',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_agent_plugin (agent_code, plugin_code),
+    INDEX idx_agent_plugin_agent (agent_code)
+) ENGINE=InnoDB COMMENT='智能体插件绑定表';
+
 -- ============================================
 -- MCP 扩展
 -- ============================================
@@ -550,6 +585,13 @@ CREATE TABLE ai_approval_whitelist (
 INSERT IGNORE INTO ai_model_provider (provider_code, name, base_url, api_key_ref, enabled) VALUES
 ('deepseek', 'DeepSeek', 'https://api.deepseek.com', 'DEEPSEEK_API_KEY', 1),
 ('glm', '智谱GLM', 'https://open.bigmodel.cn/api/paas/v4', 'GLM_API_KEY', 1);
+
+-- 种子插件：内置能力包示例（ACTIVE 但未绑定任何智能体，故不影响运行时）
+INSERT IGNORE INTO ai_plugin (plugin_code, name, version, plugin_type, description, manifest, enabled, status) VALUES
+('ops-triage-pack', '运维分诊能力包', '1.0.0', 'CAPABILITY',
+ '日志/告警分诊：声明只读排查工具并给出处置约束，绑定后随身份包注入',
+ '{"tools":["log.search","alert.query"],"skills":[],"commands":[],"prompt":"处置日志与告警时：先按日志分级定位，再判断是否提级，最后给出可执行动作与验证方式。"}',
+ 1, 'ACTIVE');
 
 INSERT IGNORE INTO ai_model (provider_code, model_name, display_name, tier, context_window, supports_tools, enabled) VALUES
 ('deepseek', 'deepseek-chat', 'DeepSeek Flash', 'FLASH', 64000, 1, 1),

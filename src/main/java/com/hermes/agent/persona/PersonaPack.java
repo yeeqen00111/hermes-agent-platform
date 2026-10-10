@@ -28,6 +28,9 @@ public class PersonaPack {
     /** 运维经验（自进化沉淀）块 */
     private List<String> experienceBlocks;
 
+    /** 插件能力块（绑定且启用的插件带来的提示词，补充项「插件」） */
+    private List<String> pluginBlocks;
+
     private String userProfile;
 
     /** 组装后的系统提示 */
