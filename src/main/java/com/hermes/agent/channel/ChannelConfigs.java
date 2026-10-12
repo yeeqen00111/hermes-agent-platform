@@ -6,9 +6,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /**
  * 渠道扩展配置（{@code ai_channel.config} JSON）读取工具。
  */
-final class ChannelConfigs {
+public final class ChannelConfigs {
 
     private ChannelConfigs() {
+    }
+
+    public static String value(JsonNode node, String key) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        String value = node.path(key).asText(null);
+        return (value == null || value.isBlank()) ? null : value;
     }
 
     static String value(ObjectMapper mapper, String configJson, String key) {

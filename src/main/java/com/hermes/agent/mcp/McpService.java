@@ -58,15 +58,21 @@ public class McpService {
                 || server.getBaseUrl() == null || server.getBaseUrl().isBlank()) {
             throw new IllegalArgumentException("serverCode 与 baseUrl 必填");
         }
+        boolean disabling = server.getId() != null && Integer.valueOf(0).equals(server.getEnabled());
         if (server.getId() != null) {
             serverMapper.updateById(server);
         } else {
             serverMapper.insert(server);
         }
+        if (disabling) {
+            // 停用即断会长连接，避免继续打到已下线服务
+            mcpClient.dropSession(server.getServerCode());
+        }
         return server;
     }
 
     public void deleteServer(String serverCode) {
+        mcpClient.dropSession(serverCode);
         McpServer server = getServer(serverCode);
         if (server != null) {
             serverMapper.deleteById(server.getId());

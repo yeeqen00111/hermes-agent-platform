@@ -30,6 +30,31 @@ public class ChannelOutboundService {
         return send(channel, receiveId, null, cardJson);
     }
 
+    /** 增量卡片门面：建卡 + 多次增量更新 + 收尾（Agent 流式回答边生成边推） */
+    public StreamingCardSender streamCard(AiChannel channel, String receiveId) {
+        return new StreamingCardSender(this, channel, receiveId);
+    }
+
+    ChannelAdapter.ChannelSendResult createStreamCard(AiChannel channel, String receiveId,
+                                                      StreamCard card) {
+        ChannelAdapter adapter = adapters.get(channel.getChannelType());
+        if (adapter == null) {
+            return ChannelAdapter.ChannelSendResult.fail("CHANNEL_TYPE_UNKNOWN",
+                    "未知渠道类型: " + channel.getChannelType());
+        }
+        return adapter.createStreamCard(channel, receiveId, card);
+    }
+
+    ChannelAdapter.ChannelSendResult updateStreamCard(AiChannel channel,
+                                                      StreamCard.CardHandle handle, String content) {
+        ChannelAdapter adapter = adapters.get(channel.getChannelType());
+        if (adapter == null) {
+            return ChannelAdapter.ChannelSendResult.fail("CHANNEL_TYPE_UNKNOWN",
+                    "未知渠道类型: " + channel.getChannelType());
+        }
+        return adapter.updateStreamCard(channel, handle, content);
+    }
+
     private ChannelAdapter.ChannelSendResult send(AiChannel channel, String receiveId, String text, String cardJson) {
         ChannelAdapter adapter = adapters.get(channel.getChannelType());
         if (adapter == null) {

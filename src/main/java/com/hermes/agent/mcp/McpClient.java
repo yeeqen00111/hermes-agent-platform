@@ -14,10 +14,11 @@ import org.springframework.web.client.RestClient;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * MCP 客户端：JSON-RPC 2.0 over HTTP（streamable HTTP 按需扩展）。
- * 只做点对点调用，凭据仅从环境变量解析，不进日志。
+ * MCP 客户端：streamable HTTP（POST + SSE 长连接），支持 {@code Mcp-Session-Id} 会话保持
+ * 与失效重连；只做点对点调用，凭据仅从环境变量解析，不进日志。
  */
 @Slf4j
 @Component
@@ -27,9 +28,14 @@ public class McpClient {
 
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
+    private final McpStreamClient streamClient;
 
-    public McpClient(ObjectMapper objectMapper) {
+    /** 已建立的 MCP 会话：serverCode → Mcp-Session-Id */
+    private final Map<String, String> sessions = new ConcurrentHashMap<>();
+
+    public McpClient(ObjectMapper objectMapper, McpStreamClient streamClient) {
         this.objectMapper = objectMapper;
+        this.streamClient = streamClient;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5000);
         factory.setReadTimeout(30000);
@@ -80,39 +86,70 @@ public class McpClient {
     }
 
     private JsonNode rpcCall(McpServer server, String method, ObjectNode params) {
+        ObjectNode request = buildRequest(method, params);
+        String session = sessionOf(server);
+        try {
+            McpStreamClient.RpcResult result = streamClient.streamRpc(server, session, request, msg -> {
+                // 中间帧（progress/log 等）忽略；目标响应在结果里
+            });
+            rememberSession(server, result);
+            return result.result();
+        } catch (McpStreamClient.SessionExpiredException e) {
+            // 会话过期（服务端重启/超时清理）：清理后重新 initialize 再重试一次
+            sessions.remove(server.getServerCode());
+            log.info("MCP 会话失效，重建后重试: {} ({})", server.getServerCode(), e.getMessage());
+            String fresh = initializeSession(server);
+            McpStreamClient.RpcResult retry = streamClient.streamRpc(server, fresh, request, msg -> {
+            });
+            rememberSession(server, retry);
+            return retry.result();
+        }
+    }
+
+    /** 取会话；没有则先 initialize 建一个（失败按无会话继续，兼容单包 server） */
+    private String sessionOf(McpServer server) {
+        String cached = sessions.get(server.getServerCode());
+        if (cached != null) {
+            return cached;
+        }
+        return initializeSession(server);
+    }
+
+    private String initializeSession(McpServer server) {
+        try {
+            McpStreamClient.RpcResult result = streamClient.streamRpc(
+                    server, null, buildRequest("initialize", initializeParams()), msg -> {
+                    });
+            String session = result.sessionId();
+            if (session != null) {
+                sessions.put(server.getServerCode(), session);
+            }
+            return session;
+        } catch (Exception e) {
+            log.warn("MCP initialize 未建立会话，按单包模式继续: {} ({})",
+                    server.getServerCode(), e.getMessage());
+            return null;
+        }
+    }
+
+    private void rememberSession(McpServer server, McpStreamClient.RpcResult result) {
+        if (result.sessionId() != null && !result.sessionId().isBlank()) {
+            sessions.put(server.getServerCode(), result.sessionId());
+        }
+    }
+
+    private ObjectNode buildRequest(String method, ObjectNode params) {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("jsonrpc", "2.0");
         body.put("id", System.nanoTime());
         body.put("method", method);
-        body.set("params", params);
-        String respText = restClient.post()
-                .uri(server.getBaseUrl())
-                .headers(h -> {
-                    h.setContentType(MediaType.APPLICATION_JSON);
-                    String apiKey = resolveApiKey(server.getApiKeyRef());
-                    if (apiKey != null) {
-                        h.setBearerAuth(apiKey);
-                    }
-                })
-                .body(body.toString())
-                .retrieve()
-                .onStatus(st -> st.value() >= 400, (req, resp) -> {
-                    throw new IllegalStateException("MCP 服务 HTTP " + resp.getStatusCode().value()
-                            + ": " + server.getServerCode());
-                })
-                .body(String.class);
-        JsonNode node;
-        try {
-            node = objectMapper.readTree(respText);
-        } catch (Exception e) {
-            throw new IllegalStateException("MCP 服务响应非JSON: " + server.getServerCode());
-        }
-        if (node.has("error")) {
-            JsonNode err = node.path("error");
-            throw new IllegalStateException("MCP RPC错误 " + err.path("code").asText()
-                    + ": " + err.path("message").asText(""));
-        }
-        return node.path("result");
+        body.set("params", params == null ? objectMapper.createObjectNode() : params);
+        return body;
+    }
+
+    /** 主动断开会话（服务器停用时调用，避免连到已下线服务） */
+    public void dropSession(String serverCode) {
+        sessions.remove(serverCode);
     }
 
     private ObjectNode initializeParams() {

@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ChannelAdapterTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final DingTalkChannelAdapter dingTalk = new DingTalkChannelAdapter(objectMapper, "http://127.0.0.1:1");
+    private final DingTalkChannelAdapter dingTalk = new DingTalkChannelAdapter(objectMapper, "http://127.0.0.1:1", "http://127.0.0.1:1");
     private final WecomChannelAdapter wecom = new WecomChannelAdapter(objectMapper, "http://127.0.0.1:1");
 
     private AiChannel channel(String code, String config, String secretRef) {
@@ -70,5 +70,36 @@ class ChannelAdapterTest {
     void adapterTypes() {
         assertThat(dingTalk.type()).isEqualTo("DINGTALK");
         assertThat(wecom.type()).isEqualTo("WECOM");
+    }
+
+    @Test
+    void dingTalkStreamCardMissingTemplateReportsConfigMissing() {
+        ChannelAdapter.ChannelSendResult result = dingTalk.createStreamCard(
+                channel("dt-4", "{\"agentId\":\"123\"}", null), "u1",
+                new StreamCard("标题", "", ""));
+        assertThat(result.ok()).isFalse();
+        assertThat(result.errorCode()).isEqualTo("CHANNEL_CONFIG_MISSING");
+    }
+
+    @Test
+    void dingTalkStreamCardUnresolvedSecretReportsCredential() {
+        ChannelAdapter.ChannelSendResult result = dingTalk.createStreamCard(
+                channel("dt-5", "{\"cardTemplateId\":\"tpl-1\"}", "HERMES_NO_SUCH_ENV_REF_XYZ"), "u1",
+                new StreamCard("标题", "tpl-1", ""));
+        assertThat(result.ok()).isFalse();
+        assertThat(result.errorCode()).isEqualTo("CHANNEL_CREDENTIAL_UNRESOLVED");
+    }
+
+    @Test
+    void wecomStreamCardUnsupported() {
+        ChannelAdapter.ChannelSendResult result = wecom.createStreamCard(
+                channel("wc-3", "{\"agentId\":\"1\"}", null), "u1",
+                new StreamCard("标题", "tpl", ""));
+        assertThat(result.ok()).isFalse();
+        assertThat(result.errorCode()).isEqualTo("CHANNEL_STREAM_CARD_UNSUPPORTED");
+        // 更新同理：不支持就不伪装成功
+        assertThat(wecom.updateStreamCard(channel("wc-4", "{}", null),
+                new StreamCard.CardHandle("WECOM", "x", "u1"), "内容").errorCode())
+                .isEqualTo("CHANNEL_STREAM_CARD_UNSUPPORTED");
     }
 }

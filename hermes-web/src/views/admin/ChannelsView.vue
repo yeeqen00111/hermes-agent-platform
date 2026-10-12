@@ -80,6 +80,46 @@ async function remove(row: Channel) {
   await load()
 }
 
+// ---------- 增量卡片试发 ----------
+const cardDialog = ref(false)
+const cardRunning = ref(false)
+const cardChannelCode = ref<string>('')
+const cardForm = reactive({ receiveId: '', title: 'HERMES 增量卡片试发' })
+const cardResult = reactive<{ ok: boolean; outTrackId: string; steps: string[]; content: string; error: string }>({
+  ok: false, outTrackId: '', steps: [], content: '', error: '',
+})
+
+function openCardDemo(row: Channel) {
+  cardChannelCode.value = row.channelCode
+  cardForm.receiveId = ''
+  cardForm.title = 'HERMES 增量卡片试发'
+  Object.assign(cardResult, { ok: false, outTrackId: '', steps: [], content: '', error: '' })
+  cardDialog.value = true
+}
+
+async function runCardDemo() {
+  if (!cardForm.receiveId) {
+    ElMessage.warning('请填接收方（用户ID或cid开头的会话ID）')
+    return
+  }
+  cardRunning.value = true
+  try {
+    const { data } = await http.post(
+      `/channels/${cardChannelCode}/stream-card/demo?receiveId=${encodeURIComponent(cardForm.receiveId)}&title=${encodeURIComponent(cardForm.title)}`,
+    )
+    Object.assign(cardResult, {
+      ok: !!data?.ok, outTrackId: data?.outTrackId ?? '',
+      steps: data?.steps ?? [], content: data?.content ?? '', error: data?.error ?? '',
+    })
+    if (data?.ok) ElMessage.success('增量卡片已发出（建卡 → 3 段增量 → 收尾）')
+    else ElMessage.warning('增量卡片未完成，见下方步骤')
+  } catch (e) {
+    ElMessage.error('试发失败：' + (e as Error).message)
+  } finally {
+    cardRunning.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -107,10 +147,11 @@ onMounted(load)
             <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '启用' : '停用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="170" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="success" size="small" @click="heartbeat(row)">心跳</el-button>
+            <el-button link type="warning" size="small" @click="openCardDemo(row)">增量卡片</el-button>
             <el-button link type="danger" size="small" @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -143,6 +184,33 @@ onMounted(load)
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="cardDialog" title="增量卡片试发（建卡 → 3 段增量 → 收尾）" width="600px">
+      <el-form label-width="90px">
+        <el-form-item label="渠道类型">
+          <b>{{ form.channelType }}</b>
+          <span class="muted">仅钉钉支持（AI 卡片可更新）；企微无更新接口，会如实报不支持</span>
+        </el-form-item>        <el-form-item label="接收方" required>
+          <el-input v-model="cardForm.receiveId" placeholder="用户ID，或 cid 开头的会话ID" />
+        </el-form-item>
+        <el-form-item label="标题">
+          <el-input v-model="cardForm.title" />
+        </el-form-item>
+      </el-form>
+      <p class="muted">会真实发到该接收方，请填测试账号；凭据需在环境变量中可解析。</p>
+      <div v-if="cardResult.steps.length">
+        <el-tag :type="cardResult.ok ? 'success' : 'danger'" size="small">{{ cardResult.ok ? '完成' : '未完成' }}</el-tag>
+        <span class="muted">outTrackId: {{ cardResult.outTrackId || '—' }}</span>
+        <ul class="steps">
+          <li v-for="(s, i) in cardResult.steps" :key="i">{{ s }}</li>
+        </ul>
+        <pre v-if="cardResult.content" class="content">{{ cardResult.content }}</pre>
+      </div>
+      <template #footer>
+        <el-button @click="cardDialog = false">关闭</el-button>
+        <el-button type="primary" :loading="cardRunning" @click="runCardDemo">发送</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -163,5 +231,20 @@ onMounted(load)
 .muted {
   color: #909399;
   font-size: 12px;
+}
+.steps {
+  margin: 8px 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.content {
+  background: #f5f7fa;
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
 }
 </style>
