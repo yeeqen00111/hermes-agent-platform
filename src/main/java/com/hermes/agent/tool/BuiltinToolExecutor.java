@@ -224,9 +224,13 @@ public class BuiltinToolExecutor {
 
     private ToolResponse alertQuery(Map<String, Object> args, long startTime) {
         int limit = intArg(args, "limit", 50, 200);
+        String statusFilter = str(args, "status");
+        // status 在 Java 侧按处理流水计算，SQL 先截断会把符合状态但较旧的记录漏掉：
+        // 带 status 过滤时扩大扫描窗（2000）再截取 limit，保证结果完整
+        int scanLimit = statusFilter == null || statusFilter.isBlank() ? limit : 2000;
         LambdaQueryWrapper<AlertRecord> wrapper = new LambdaQueryWrapper<AlertRecord>()
                 .orderByDesc(AlertRecord::getId)
-                .last("LIMIT " + limit);
+                .last("LIMIT " + scanLimit);
         String severity = str(args, "severity");
         if (severity != null && !severity.isBlank()) {
             String mapped = SEVERITY_TO_LEVEL.get(severity.trim().toUpperCase());
@@ -256,7 +260,6 @@ public class BuiltinToolExecutor {
                     .forEach(h -> latestHandle.put(h.getRecordId(), h));
         }
 
-        String statusFilter = str(args, "status");
         List<Map<String, Object>> rows = new ArrayList<>();
         for (AlertRecord r : records) {
             Map<String, Object> row = recordRow(r);
@@ -271,6 +274,9 @@ public class BuiltinToolExecutor {
             row.put("handleBy", h == null ? null : h.getHandleBy());
             row.put("handleTime", h == null ? null : h.getCreateTime().toString());
             rows.add(row);
+            if (rows.size() >= limit) {
+                break;
+            }
         }
 
         Map<String, Object> data = new LinkedHashMap<>();
@@ -336,7 +342,8 @@ public class BuiltinToolExecutor {
         LocalDateTime to = time(args, "to", true);
 
         BizMetric def = bizMetricMapper.selectOne(new LambdaQueryWrapper<BizMetric>()
-                .eq(BizMetric::getCode, metric));
+                .eq(BizMetric::getCode, metric)
+                .last("LIMIT 1"));
         if (def == null) {
             return error("database.metric.query", "METRIC_NOT_FOUND",
                     "指标不存在（先到「业务指标监控」定义）: " + metric, startTime);
@@ -556,7 +563,8 @@ public class BuiltinToolExecutor {
                     return dt;
                 }
                 if (parsed instanceof LocalDate d) {
-                    return d.atStartOfDay();
+                    // 纯日期：from 取当日 00:00，to 取当日末尾，保证闭区间语义
+                    return "to".equals(key) ? d.atTime(23, 59, 59) : d.atStartOfDay();
                 }
             } catch (Exception ignored) {
                 // 逐个格式重试

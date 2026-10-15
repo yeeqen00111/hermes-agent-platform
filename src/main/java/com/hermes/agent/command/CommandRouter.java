@@ -226,7 +226,8 @@ public class CommandRouter {
             AiModel m = modelMapper.selectOne(new LambdaQueryWrapper<AiModel>()
                     .eq(AiModel::getProviderCode, model.substring(0, separator))
                     .eq(AiModel::getModelName, model.substring(separator + 1))
-                    .eq(AiModel::getEnabled, 1));
+                    .eq(AiModel::getEnabled, 1)
+                    .last("LIMIT 1"));
             window = m == null ? null : m.getContextWindow();
         }
         StringBuilder sb = new StringBuilder();

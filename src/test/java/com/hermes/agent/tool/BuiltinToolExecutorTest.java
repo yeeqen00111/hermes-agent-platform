@@ -297,6 +297,24 @@ class BuiltinToolExecutorTest {
     }
 
     @Test
+    void alertQueryStatusFilterFindsOlderHandledRecordsBeyondSqlLimit() {
+        // 最旧的告警已解决；status=RESOLVED + limit=2 时 SQL 截断不能把这条漏掉
+        AlertRecord old = record("order", "order-api", "ERROR", "old down", T0, "ALERT");
+        record("order", "order-api", "WARN", "recent a", T0.plusMinutes(1), "ALERT");
+        record("order", "order-api", "WARN", "recent b", T0.plusMinutes(2), "ALERT");
+        AlertHandle handle = new AlertHandle();
+        handle.setRecordId(old.getId());
+        handle.setAction("RESOLVED");
+        handle.setCreateTime(LocalDateTime.now());
+        sqlSession.getMapper(AlertHandleMapper.class).insert(handle);
+
+        Map<?, ?> data = (Map<?, ?>) run("alert.query", Map.of("status", "RESOLVED", "limit", "2")).getData();
+        List<?> rows = (List<?>) data.get("records");
+        assertThat(rows).hasSize(1);
+        assertThat(((Map<?, ?>) rows.get(0)).get("eventId")).isEqualTo(old.getId());
+    }
+
+    @Test
     void nacosToolsFailExplicitlyWhenNoServerConfigured() {
         ToolResponse resp = run("nacos.config.query", Map.of(
                 "namespace", "public", "group", "DEFAULT_GROUP", "dataId", "app.yaml"));

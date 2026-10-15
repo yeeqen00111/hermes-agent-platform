@@ -32,6 +32,10 @@ public class NacosDataPlaneService {
     private final NacosServerMapper serverMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /** 连接复用：数据面调用频繁，不复用会反复握手 */
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(3)).build();
+
     /** 配置快照：GET /nacos/v1/cs/configs */
     public Map<String, Object> configQuery(String environment, String namespace,
                                            String group, String dataId) {
@@ -117,10 +121,15 @@ public class NacosDataPlaneService {
         try {
             return fn.run(server);
         } catch (Exception e) {
-            log.warn("Nacos 数据面调用失败: server={}, {}", server.getCode(), e.getMessage());
+            log.warn("Nacos 数据面调用失败: server={}, {}", server.getCode(), sanitize(e.getMessage()));
             return Map.of("success", false, "errorCode", "NACOS_CALL_FAILED",
-                    "message", "Nacos 调用失败: " + e.getMessage());
+                    "message", "Nacos 调用失败: " + sanitize(e.getMessage()));
         }
+    }
+
+    /** 错误信息脱敏：accessToken 不进日志、不进工具响应（GET 带 token 是 Nacos v1 协议限制） */
+    private String sanitize(String message) {
+        return message == null ? null : message.replaceAll("accessToken=[^&\\s]+", "accessToken=***");
     }
 
     private NacosServer resolveServer(String environment) {
@@ -164,8 +173,7 @@ public class NacosDataPlaneService {
         }
         HttpRequest request = HttpRequest.newBuilder(URI.create(url.toString()))
                 .timeout(Duration.ofSeconds(5)).GET().build();
-        return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3))
-                .build().send(request, HttpResponse.BodyHandlers.ofString());
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private String accessToken(NacosServer server) throws Exception {
@@ -182,8 +190,7 @@ public class NacosDataPlaneService {
                 .timeout(Duration.ofSeconds(5))
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(form)).build();
-        HttpResponse<String> resp = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3))
-                .build().send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200) {
             return null;
         }
@@ -199,7 +206,7 @@ public class NacosDataPlaneService {
     private Map<String, Object> httpError(HttpResponse<String> resp) {
         return Map.of("success", false, "errorCode", "NACOS_HTTP_" + resp.statusCode(),
                 "message", "Nacos 返回 HTTP " + resp.statusCode()
-                        + (resp.body() == null || resp.body().isBlank() ? "" : ": " + truncate(resp.body())));
+                        + (resp.body() == null || resp.body().isBlank() ? "" : ": " + truncate(sanitize(resp.body()))));
     }
 
     private String truncate(String s) {
