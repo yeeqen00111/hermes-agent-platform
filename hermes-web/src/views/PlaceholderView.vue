@@ -6,11 +6,11 @@ const route = useRoute()
 const title = computed(() => String(route.meta.title ?? ''))
 const group = computed(() => String(route.meta.group ?? ''))
 
-/** 占位屏的真实原因——如实标注，不糊弄（判据=后端有没有端点/权威在哪） */
-const HINTS: Record<string, string> = {
-  '/qa': '迁移项：智能问数数据面（database.metric.query 语义层）由 Java 平台提供，本平台只做人格包 + 执行器。',
-  '/report/smart': '迁移项：智能报表·千人千面基于控制塔接口（白板注「已完成-待迁移」）。',
-}
+/**
+ * 占位屏：只作兜底（导航新增了路径但还没写屏时）。
+ * /qa、/report/smart 已是绑定身份包的真实功能屏（ADR-014），不再走这里。
+ */
+const HINTS: Record<string, string> = {}
 
 const hint = computed(() => HINTS[route.path] ?? '本模块按白板逐屏实现中。')
 </script>

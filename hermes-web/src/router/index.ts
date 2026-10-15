@@ -33,6 +33,8 @@ import CommandsView from '@/views/admin/CommandsView.vue'
 import PluginsView from '@/views/admin/PluginsView.vue'
 import RbacView from '@/views/admin/RbacView.vue'
 import TenantsView from '@/views/admin/TenantsView.vue'
+import SmartQaView from '@/views/qa/SmartQaView.vue'
+import SmartReportView from '@/views/report/SmartReportView.vue'
 import { navGroups } from '@/nav'
 
 const realComponents: Record<string, unknown> = {
@@ -68,6 +70,9 @@ const realComponents: Record<string, unknown> = {
   '/admin/agent/plugins': PluginsView,
   '/admin/org/users': RbacView,
   '/admin/org/tenant': TenantsView,
+  // ADR-014 迁移项清零：问数/报表绑自研身份包的真实功能屏
+  '/qa': SmartQaView,
+  '/report/smart': SmartReportView,
 }
 
 const children: RouteRecordRaw[] = []

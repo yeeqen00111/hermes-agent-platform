@@ -3,7 +3,7 @@
  *  (1) 需求树：技术架构〔平台层（系统层/系统管理/功能）· 业务层 · Agent 层〕；
  *  (2) HERMES 架构； (3) 代码审查任务流程。
  * 用户补充（不在三张图、但指定保留）：技能 / MCP / 指令 / 智能体 / 插件 / 模型 / 渠道。
- * 标记：★ 本期目标；🔁 迁移项（岚图/控制塔已有现成系统，只做适配）。
+ * 标记：★ 本期目标。（原 🔁 迁移项标记已废除：ADR-014 迁移项清零，全部自研实现。）
  */
 export interface NavItem {
   path: string
@@ -65,7 +65,7 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
-    title: '业务层 · 报表 / 问数（🔁）',
+    title: '业务层 · 报表 / 问数',
     items: [
       { path: '/report/smart', title: '智能报表 · 千人千面' },
       { path: '/qa', title: '智能问数' },

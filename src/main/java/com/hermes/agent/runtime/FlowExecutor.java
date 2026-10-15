@@ -18,18 +18,24 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * 固定流程编排执行器：确定性步骤流水线（TOOL/LLM），
  * 每步落库状态/耗时/上下游/错误原因。
+ * TOOL 步骤入参来源：静态 arguments → argsFromUpstream（上游输出 JSON）→ {"input": 上游文本}。
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FlowExecutor {
+
+    private static final DateTimeFormatter NOW_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final FlowRunMapper flowRunMapper;
     private final FlowStepLogMapper stepLogMapper;
@@ -37,7 +43,10 @@ public class FlowExecutor {
     private final LlmGateway llmGateway;
     private final ObjectMapper objectMapper;
 
-    public AgentRunResult execute(PersonaPack pack, AgentRunRequest request) {
+    public AgentRunResult execute(PersonaPack pack, AgentRunRequest request,
+                                  Consumer<String> onDelta,
+                                  Consumer<AgentRunResult.ToolEvent> onToolEvent,
+                                  SessionCancellationRegistry.Handle cancelHandle) {
         FlowRun run = new FlowRun();
         run.setRunId(UUID.randomUUID().toString());
         run.setAgentCode(pack.getAgentCode());
@@ -51,11 +60,19 @@ public class FlowExecutor {
         try {
             JsonNode flow = objectMapper.readTree(pack.getProfile().getFlowDefinition());
             JsonNode steps = flow.path("steps");
+            int last = steps.isArray() ? steps.size() - 1 : -1;
             Map<String, String> outputs = new HashMap<>();
             String prev = request.getUserInput() == null ? "" : request.getUserInput();
             String lastOutput = prev;
 
-            for (JsonNode step : steps) {
+            for (int i = 0; i <= last; i++) {
+                JsonNode step = steps.get(i);
+                if (cancelHandle != null && cancelHandle.isCancelled()) {
+                    run.setStatus("INTERRUPTED");
+                    result.setReply(AgentRuntime.INTERRUPTED_REPLY);
+                    result.setInterrupted(true);
+                    return result;
+                }
                 String code = step.path("code").asText();
                 String upstream = step.path("upstream").asText("");
                 String stepInput = upstream.isEmpty() ? prev : outputs.getOrDefault(upstream, prev);
@@ -63,9 +80,14 @@ public class FlowExecutor {
                 try {
                     String output;
                     if ("TOOL".equalsIgnoreCase(step.path("type").asText())) {
-                        output = runToolStep(pack, request, step, stepInput, result);
+                        output = runToolStep(pack, request, step, stepInput, result, onToolEvent);
                     } else {
                         output = runLlmStep(pack, step, stepInput, request);
+                        if (i == last && onDelta != null && !output.isEmpty()) {
+                            for (int p = 0; p < output.length(); p += 16) {
+                                onDelta.accept(output.substring(p, Math.min(p + 16, output.length())));
+                            }
+                        }
                     }
                     outputs.put(code, output);
                     lastOutput = output;
@@ -94,7 +116,8 @@ public class FlowExecutor {
     }
 
     private String runToolStep(PersonaPack pack, AgentRunRequest request, JsonNode step,
-                               String stepInput, AgentRunResult result) {
+                               String stepInput, AgentRunResult result,
+                               Consumer<AgentRunResult.ToolEvent> onToolEvent) {
         String toolCode = step.path("toolCode").asText();
         ToolRequest tr = new ToolRequest();
         tr.setTraceId(request.getTraceId());
@@ -105,11 +128,36 @@ public class FlowExecutor {
         tr.setDataScope(request.getDataScope());
         tr.setEnvironment(request.getEnvironment());
         Map<String, Object> args = new HashMap<>();
-        args.put("input", stepInput);
+        JsonNode staticArgs = step.path("arguments");
+        if (staticArgs.isObject()) {
+            staticArgs.fields().forEachRemaining(f -> args.put(f.getKey(), jsonValue(f.getValue())));
+        }
+        if (step.path("argsFromUpstream").asBoolean(false)) {
+            boolean merged = false;
+            try {
+                JsonNode up = objectMapper.readTree(stepInput);
+                if (up != null && up.isObject()) {
+                    up.fields().forEachRemaining(f -> args.put(f.getKey(), jsonValue(f.getValue())));
+                    merged = true;
+                }
+            } catch (Exception ignore) {
+                // 上游不是 JSON 对象时回退 {"input"}，让工具以缺参错误如实反馈
+            }
+            if (!merged) {
+                args.putIfAbsent("input", stepInput);
+            }
+        }
+        if (args.isEmpty()) {
+            args.put("input", stepInput);
+        }
         tr.setArguments(args);
         ToolResponse resp = toolExecutor.execute(toolCode, tr);
-        result.getToolEvents().add(new AgentRunResult.ToolEvent(
-                toolCode, Boolean.TRUE.equals(resp.getSuccess()), resp.getErrorMessage()));
+        AgentRunResult.ToolEvent event = new AgentRunResult.ToolEvent(
+                toolCode, Boolean.TRUE.equals(resp.getSuccess()), resp.getErrorMessage());
+        result.getToolEvents().add(event);
+        if (onToolEvent != null) {
+            onToolEvent.accept(event);
+        }
         if (!Boolean.TRUE.equals(resp.getSuccess())) {
             throw new IllegalStateException("工具执行失败: " + resp.getErrorCode() + " " + resp.getErrorMessage());
         }
@@ -123,10 +171,31 @@ public class FlowExecutor {
     private String runLlmStep(PersonaPack pack, JsonNode step, String stepInput, AgentRunRequest request) {
         String prompt = step.path("promptTemplate").asText("{{prev}}")
                 .replace("{{prev}}", stepInput)
-                .replace("{{input}}", request.getUserInput() == null ? "" : request.getUserInput());
-        return llmGateway.chat(pack.getProfile(), java.util.List.of(
+                .replace("{{input}}", request.getUserInput() == null ? "" : request.getUserInput())
+                .replace("{{now}}", LocalDateTime.now().format(NOW_FMT));
+        return llmGateway.chat(pack.getProfile(), List.of(
                 LlmMessage.system(pack.getSystemPrompt()),
                 LlmMessage.user(prompt)));
+    }
+
+    /** JsonNode → 工具入参值：数值/布尔保型，其余转文本 */
+    private Object jsonValue(JsonNode n) {
+        if (n == null || n.isNull()) {
+            return null;
+        }
+        if (n.isInt() || n.isLong()) {
+            return n.asLong();
+        }
+        if (n.isBoolean()) {
+            return n.asBoolean();
+        }
+        if (n.isDouble() || n.isFloat() || n.isBigDecimal()) {
+            return n.asDouble();
+        }
+        if (n.isValueNode()) {
+            return n.asText();
+        }
+        return n.toString();
     }
 
     private FlowStepLog startStep(String runId, JsonNode step, String upstream) {

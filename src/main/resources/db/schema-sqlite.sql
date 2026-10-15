@@ -625,18 +625,20 @@ INSERT OR IGNORE INTO ai_agent_profile
  'LLM_DRIVEN', 'API',
  '["knowledge.search"]',
  '{"injectTopK":5,"writeback":false}', 'PUBLISHED'),
-('report-analyst', '报表分析员', '固定流程编排身份：聚合日志→生成告警报表摘要', 'deepseek', 'deepseek-chat',
+('report-analyst', '报表分析员', '固定流程编排身份：抽取参数→聚合日志→生成告警报表摘要', 'deepseek', 'deepseek-chat',
  'FIXED_FLOW', 'SCHEDULED',
  '["log.aggregate","alert.query"]',
  '{"injectTopK":0,"writeback":false}', 'PUBLISHED'),
-('data-analyst', '问数分析员', '固定流程编排身份：受控指标查询→结果分析与解释（四期迁移适配，数据面待Java平台）', 'deepseek', 'deepseek-chat',
+('data-analyst', '问数分析员', '固定流程编排身份：抽取参数→受控指标查询→结果分析与解释（本地自研数据面，ADR-014）', 'deepseek', 'deepseek-chat',
  'FIXED_FLOW', 'CHAT',
  '["database.metric.query","knowledge.search"]',
  '{"injectTopK":0,"writeback":false}', 'PUBLISHED');
 
-UPDATE ai_agent_profile SET flow_definition = '{"steps":[{"code":"aggregate","name":"告警日志聚合","type":"TOOL","toolCode":"log.aggregate"},{"code":"summarize","name":"报表摘要生成","type":"LLM","upstream":"aggregate","promptTemplate":"你是报表分析员。基于以下聚合数据生成告警报表摘要（markdown）：\n{{prev}}"}]}' WHERE agent_code = 'report-analyst';
+UPDATE ai_agent_profile SET flow_definition = '{"steps":[{"code":"extract","name":"参数抽取","type":"LLM","promptTemplate":"你是报表分析员。从任务输入中抽取日志聚合参数，只输出一个 JSON 对象（不要 markdown 代码块、不要解释文字）：{\"service\":\"服务名或系统名\",\"from\":\"yyyy-MM-dd HH:mm:ss\",\"to\":\"yyyy-MM-dd HH:mm:ss\",\"groupBy\":\"level 或 service\"}。from/to 缺省为最近24小时；groupBy 缺省 level；无法确定 service 时置空字符串。当前时间：{{now}}。任务输入：\n{{input}}"},{"code":"aggregate","name":"告警日志聚合","type":"TOOL","toolCode":"log.aggregate","upstream":"extract","argsFromUpstream":true},{"code":"summarize","name":"报表摘要生成","type":"LLM","upstream":"aggregate","promptTemplate":"你是报表分析员。基于以下聚合数据生成告警报表摘要（markdown）：\n{{prev}}"}]}' WHERE agent_code = 'report-analyst';
 
-UPDATE ai_agent_profile SET flow_definition = '{"steps":[{"code":"query","name":"受控指标查询","type":"TOOL","toolCode":"database.metric.query"},{"code":"analyze","name":"结果分析与解释","type":"LLM","upstream":"query","promptTemplate":"你是问数分析员。基于以下查询结果给出结论、表格与解释（markdown）：\n{{prev}}"}]}' WHERE agent_code = 'data-analyst';
+UPDATE ai_agent_profile SET description = '固定流程编排身份：抽取参数→受控指标查询→结果分析与解释（本地自研数据面，ADR-014）' WHERE agent_code = 'data-analyst';
+
+UPDATE ai_agent_profile SET flow_definition = '{"steps":[{"code":"extract","name":"参数抽取","type":"LLM","promptTemplate":"你是问数分析员。从用户问题中抽取指标查询参数，只输出一个 JSON 对象（不要 markdown 代码块、不要解释文字）：{\"metric\":\"指标编码\",\"from\":\"yyyy-MM-dd HH:mm:ss\",\"to\":\"yyyy-MM-dd HH:mm:ss\"}。metric 为业务指标编码（见业务指标监控定义）；from/to 缺省为最近24小时；无法确定 metric 时置空字符串。当前时间：{{now}}。用户问题：\n{{input}}"},{"code":"query","name":"受控指标查询","type":"TOOL","toolCode":"database.metric.query","upstream":"extract","argsFromUpstream":true},{"code":"analyze","name":"结果分析与解释","type":"LLM","upstream":"query","promptTemplate":"你是问数分析员。基于以下查询结果给出结论、表格与解释（markdown）：\n{{prev}}"}]}' WHERE agent_code = 'data-analyst';
 
 INSERT OR IGNORE INTO ai_agent_context_file (file_type, content, scope, agent_code) VALUES
 ('SOUL', '# SOUL
@@ -654,13 +656,16 @@ INSERT OR IGNORE INTO ai_agent_context_file (file_type, content, scope, agent_co
 ('AGENTS', '# AGENTS
 评审约定：遵循仓库review_prompt_extra中的仓库级规范；评分0-100；每个问题标注severity(BLOCKER/CRITICAL/MAJOR/MINOR)与category。', 'AGENT', 'code-reviewer'),
 ('SOUL', '# SOUL
-你是报表分析员，按固定流程执行：聚合→摘要。不做流程外推理。', 'AGENT', 'report-analyst'),
+你是报表分析员，按固定流程执行：抽取参数→聚合→摘要。不做流程外推理。', 'AGENT', 'report-analyst'),
 ('SOUL', '# SOUL
-你是问数分析员，按固定流程执行：指标查询→分析解释。不做流程外推理。
+你是问数分析员，按固定流程执行：抽取参数→指标查询→分析解释。不做流程外推理。
 输入：自然语言问题→指标与维度识别→受控查询。
 输出：表格、图表建议与解释；只读查询，不写库。', 'AGENT', 'data-analyst'),
 ('AGENTS', '# AGENTS
-问数约定：指标定义与SQL模板由平台语义层提供；只允许SELECT；结果须标注数据时间范围与来源指标编码。', 'AGENT', 'data-analyst');
+问数约定：指标编码以业务指标监控定义为准；只读查询不写库；结果须标注数据时间范围与来源指标编码。', 'AGENT', 'data-analyst');
+
+UPDATE ai_agent_context_file SET content = '# AGENTS
+问数约定：指标编码以业务指标监控定义为准；只读查询不写库；结果须标注数据时间范围与来源指标编码。' WHERE agent_code = 'data-analyst' AND file_type = 'AGENTS' AND scope = 'AGENT';
 
 -- ============================================
 -- 三期 平台管理面：项目 / 用户（人员）

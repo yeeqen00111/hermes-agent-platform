@@ -82,7 +82,7 @@ public class AgentRuntime {
                 return interruptedResult(result);
             }
             if (pack.isFixedFlow()) {
-                return flowExecutor.execute(pack, request);
+                return flowExecutor.execute(pack, request, onDelta, onToolEvent, handle);
             }
 
             List<LlmMessage> messages = buildMessages(pack, request);
