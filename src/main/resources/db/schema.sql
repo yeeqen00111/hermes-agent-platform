@@ -867,6 +867,17 @@ CREATE TABLE IF NOT EXISTS ai_alert_record (
     INDEX idx_alert_record_time (create_time)
 ) ENGINE=InnoDB COMMENT='告警记录（固化流程产出）';
 
+-- 告警处理流水（追加式）：工具 alert.acknowledge/resolve/suppress 落单，不改告警记录本身
+CREATE TABLE IF NOT EXISTS ai_alert_handle (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    record_id BIGINT NOT NULL COMMENT '关联 ai_alert_record.id',
+    action VARCHAR(32) NOT NULL COMMENT 'CONFIRMED / RESOLVED / SUPPRESSED',
+    comment VARCHAR(500) COMMENT '备注',
+    handle_by VARCHAR(64) COMMENT '处理人',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '处理时间',
+    INDEX idx_alert_handle_record (record_id)
+) ENGINE=InnoDB COMMENT='告警处理流水（确认/解决/静默）';
+
 CREATE TABLE IF NOT EXISTS ai_log_retention (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     data_type VARCHAR(32) NOT NULL COMMENT 'FULL（全量）/ ALERT（告警）/ PROMOTE（提级告警）',

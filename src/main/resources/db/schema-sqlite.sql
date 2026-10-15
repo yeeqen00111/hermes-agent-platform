@@ -889,6 +889,18 @@ CREATE TABLE IF NOT EXISTS ai_alert_record (
 CREATE INDEX IF NOT EXISTS idx_alert_rule_type ON ai_alert_rule(rule_type);
 CREATE INDEX IF NOT EXISTS idx_alert_record_time ON ai_alert_record(create_time);
 
+-- 告警处理流水（追加式）：工具 alert.acknowledge/resolve/suppress 落单，不改告警记录本身
+CREATE TABLE IF NOT EXISTS ai_alert_handle (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    record_id BIGINT NOT NULL,
+    action VARCHAR(32) NOT NULL,
+    comment VARCHAR(500),
+    handle_by VARCHAR(64),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_handle_record ON ai_alert_handle(record_id);
+
 CREATE TABLE IF NOT EXISTS ai_log_retention (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     data_type VARCHAR(32) NOT NULL UNIQUE,

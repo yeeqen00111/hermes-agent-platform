@@ -37,7 +37,7 @@ public class ToolExecutor {
     private final ToolCallAuditService auditService;
     private final SkillRegistry skillRegistry;
     private final NotificationGateway notificationGateway;
-    private final MigrationToolAdapter migrationToolAdapter;
+    private final BuiltinToolExecutor builtinToolExecutor;
     private final McpService mcpService;
     private final ObjectMapper objectMapper;
 
@@ -96,7 +96,7 @@ public class ToolExecutor {
             }
         }
 
-        // 4. skill.load / notification.send 真实执行；迁移项工具走适配层（四期，未接通显式报错）
+        // 4. 真实执行：skill/notification/mcp 走各自网关；其余内置工具走本地自研数据面（ADR-014：迁移项清零）
         if ("skill.load".equals(toolCode)) {
             return executeSkillLoad(request, startTime);
         }
@@ -106,7 +106,11 @@ public class ToolExecutor {
         if (toolCode.startsWith("mcp.")) {
             return mcpService.callTool(toolCode, request, startTime);
         }
-        return migrationToolAdapter.execute(toolCode, request, startTime);
+        if (builtinToolExecutor.supports(toolCode)) {
+            return builtinToolExecutor.execute(toolCode, request, startTime);
+        }
+        return errorResponse(toolCode, "TOOL_NOT_IMPLEMENTED",
+                "工具已注册但未实现执行器: " + toolCode, startTime);
     }
 
     private ToolResponse executeNotificationSend(ToolRequest request, long startTime) {
